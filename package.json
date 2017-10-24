@@ -1,0 +1,32 @@
+{
+  "name": "oblako-analytics",
+  "version": "1.0.0",
+  "description": "Oblako thesis group - Analytics service",
+  "main": "index.js",
+  "dependencies": {
+    "body-parser": "^1.18.2",
+    "express": "^4.16.2",
+    "faker": "^4.1.0"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hackreactor/hrsf82-thesis.git"
+  },
+  "keywords": [
+    "oblako",
+    "thesis",
+    "group",
+    "7",
+    "82"
+  ],
+  "author": "Daniel Tran",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/hackreactor/hrsf82-thesis/issues"
+  },
+  "homepage": "https://github.com/hackreactor/hrsf82-thesis#readme"
+}
