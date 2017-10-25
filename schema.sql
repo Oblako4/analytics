@@ -8,16 +8,16 @@ CREATE TABLE user_order (
   id INT AUTO_INCREMENT NOT NULL,
   user_id INT NOT NULL,
   billing_state VARCHAR(50) NOT NULL,
-  billing_zip INT NOT NULL,
+  billing_zip VARCHAR(5) NOT NULL,
   billing_country VARCHAR(50) NOT NULL,
   shipping_state VARCHAR(50) NOT NULL,
-  shipping_zip INT NOT NULL,
+  shipping_zip VARCHAR(5) NOT NULL,
   shipping_country VARCHAR(50) NOT NULL,
-  total_price DECIMAL(65, 2),
-  fraud_score DECIMAL(65, 2),
+  total_price DECIMAL(7, 2),
+  fraud_score INT,
   purchased_at DATETIME NOT NULL,
   chargedback_at DATETIME,
-  std_devs_from_aov DECIMAL(65, 2),
+  std_devs_from_aov DECIMAL(7, 5),
   PRIMARY KEY (id)
 );
 
@@ -25,7 +25,7 @@ CREATE TABLE category (
   id INT AUTO_INCREMENT NOT NULL,
   category_id INT NOT NULL,
   name VARCHAR(50) NOT NULL,
-  fraud_risk DECIMAL(65, 2),
+  fraud_risk INT,
   PRIMARY KEY (id)
 );
 
