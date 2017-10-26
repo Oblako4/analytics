@@ -5,7 +5,7 @@ CREATE DATABASE analytics;
 USE analytics;
 
 CREATE TABLE user_order (
-  id INT AUTO_INCREMENT NOT NULL,
+  id INT NOT NULL,
   user_id INT NOT NULL,
   billing_state VARCHAR(50) NOT NULL,
   billing_zip VARCHAR(5) NOT NULL,
@@ -23,15 +23,13 @@ CREATE TABLE user_order (
 
 CREATE TABLE category (
   id INT AUTO_INCREMENT NOT NULL,
-  category_id INT NOT NULL,
   name VARCHAR(50) NOT NULL,
   fraud_risk INT,
   PRIMARY KEY (id)
 );
 
 CREATE TABLE item (
-  id INT AUTO_INCREMENT NOT NULL,
-  inv_id INT,
+  id INT NOT NULL,
   category_id INT NOT NULL,
   order_id INT NOT NULL,
   quantity INT NOT NULL,
