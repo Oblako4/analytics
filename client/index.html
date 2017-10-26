@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Oblako Analytics</title>
+</head>
+<body>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+<form>
+  <input type="text" name="Enter number . . ." class="number">
+  <button type="button" class="categories">Generate categories</button>
+  <button type="button" class="orders">Generate orders</button>
+  <button type="button" class="devices">Generate devices</button>
+</form>
+
+<script>
+  $(document).ready(function(){
+    $('.categories').click(function(){
+      $.ajax({
+        method: 'GET',
+        contentType: 'application/json',
+        url: '/categories'
+      });
+    });
+    $('.orders').click(function(){
+      let number = $('.number').val();
+      $.ajax({
+        method: 'GET',
+        contentType: 'application/json',
+        url: '/orders'
+      });
+    });
+    $('.devices').click(function(){
+      $.ajax({
+        method: 'GET',
+        contentType: 'application/json',
+        url: '/devices'
+      });
+    });
+  });
+</script>
+</body>
+</html>
