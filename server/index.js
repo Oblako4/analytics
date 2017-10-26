@@ -97,9 +97,9 @@ app.get('/orders', (req, res) => {
       order.order.user_id = Math.floor(Math.random() * 10000);
       order.order.billing_state = order.order.shipping_state = faker.address.stateAbbr();
       order.order.billing_zip = order.order.shipping_zip = faker.address.zipCode();
-      order.order.billing_country = order.order.shipping_country = faker.address.country();
+      order.order.billing_country = order.order.shipping_country = 'USA';
       order.order.total_price = faker.commerce.price();
-      order.order.purchased_at = moment(faker.date.recent()).format("YYYY-MM-DD HH:mm:ss");
+      order.order.purchased_at = moment(faker.date.between('2017-07-25', '2017-10-25')).format("YYYY-MM-DD HH:mm:ss");
       order.order.std_devs_from_aov = Math.floor(Math.random() * 3);
 
       // generate items in order
@@ -138,12 +138,12 @@ app.get('/orders', (req, res) => {
     fraudOrder.id = Math.floor(Math.random() * 10000);
     fraudOrder.billing_state = faker.address.stateAbbr();
     fraudOrder.billing_zip = faker.address.zipCode();
-    fraudOrder.billing_country = faker.address.country();
+    fraudOrder.billing_country = 'USA';
     fraudOrder.shipping_state = faker.address.stateAbbr();
     fraudOrder.shipping_zip = faker.address.zipCode();
-    fraudOrder.shipping_country = faker.address.country();
+    fraudOrder.shipping_country = 'USA';
     fraudOrder.total_price = faker.commerce.price();
-    fraudOrder.purchased_at = moment(faker.date.recent()).format("YYYY-MM-DD HH:mm:ss");
+    fraudOrder.purchased_at = moment(faker.date.between('2017-07-25', '2017-10-25')).format("YYYY-MM-DD HH:mm:ss");
     fraudOrder.std_devs_from_aov = Math.floor(Math.random() * 3);
 
     promisesArray.push(
@@ -174,7 +174,7 @@ app.get('/devices', (req, res) => {
   device.user_id = Math.floor(Math.random() * 10000);
   device.device_name = deviceList[Math.floor(Math.random() * deviceList.length)];
   device.device_os = osList[Math.floor(Math.random() * osList.length)];
-  device.logged_in_at = moment(faker.date.recent()).format("YYYY-MM-DD HH:mm:ss");
+  device.logged_in_at = moment(faker.date.between('2017-07-25', '2017-10-25')).format("YYYY-MM-DD HH:mm:ss");
 
   promisesArray.push(
     db.addNewDevice(
