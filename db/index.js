@@ -38,7 +38,7 @@ const addNewItemFromOrder = (id, category_id, order_id, quantity) => {
 const addNewDevice = (user_id, device_name, device_os, logged_in_at) => {
   return connection.queryAsync(
     `INSERT IGNORE INTO device (user_id, device_name, device_os, logged_in_at)
-    VALUES ("${user_id}", "${device_name}", "${device_os}", "${logged_in_at}")`)
+    VALUES ("1271", "${device_name}", "${device_os}", "${logged_in_at}")`)
   .then((response) => {
     return response;
   })
@@ -96,9 +96,64 @@ const addNewOrder = (
   });
 }
 
+const searchOrders = id => {
+  return connection.queryAsync(`SELECT * FROM user_order WHERE id = "${id}"`)
+  .then(response => {
+    return response;
+  })
+  .catch(response => {
+    return response;
+  });
+}
+
+const searchDevices = user_id => {
+  return connection.queryAsync(`SELECT * FROM device WHERE user_id = "${user_id}"`)
+  .then(response => {
+    return response;
+  })
+  .catch(response => {
+    return response;
+  });
+}
+
+const searchItems = item_id => {
+  return connection.queryAsync(`SELECT category_id FROM item WHERE id = "${item_id}"`)
+  .then(response => {
+    return response;
+  })
+  .catch(response => {
+    return response;
+  });
+}
+
+const getCategoryFraudRisk = category_id => {
+  return connection.queryAsync(`SELECT fraud_risk FROM category WHERE id = "${category_id}"`)
+  .then(response => {
+    return response;
+  })
+  .catch(response => {
+    return response;
+  });
+}
+
+const updateFraudScore = (user_id, fraud_score) => {
+  return connection.queryAsync(`UPDATE user_order SET fraud_score = "${fraud_score}" WHERE user_id = "${user_id}"`)
+  .then(response => {
+    return response;
+  })
+  .catch(response => {
+    return response;
+  });
+}
+
 module.exports = {
   addNewCategory,
   addNewOrder,
   addNewItemFromOrder,
-  addNewDevice
+  addNewDevice,
+  searchOrders,
+  searchDevices,
+  searchItems,
+  getCategoryFraudRisk,
+  updateFraudScore
 }
