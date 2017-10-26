@@ -191,10 +191,15 @@ app.get('/devices', (req, res) => {
 });
 
 app.post('/fraud', (req, res) => {
+  //Algorithm parameters
+  const algWeight = 25;
+  const acceptableAOVStdDev = 2;
+  const acceptableNumOfDevices = 3;
+
   let fraud_score = 0;
-  let order_id = req.body.order.order_id;
-  let user_id = req.body.order.user_id;
-  let items = req.body.items;
+  const order_id = req.body.order.order_id;
+  const user_id = req.body.order.user_id;
+  const items = req.body.items;
 
   //Search for order by order ID
   return db.searchOrders(order_id)
@@ -203,19 +208,18 @@ app.post('/fraud', (req, res) => {
 
   //*** INFO FROM ORDERS ***
   .then(({billing_name, shipping_name, billing_state, shipping_state, user_id, std_devs_from_aov}) => {
-    //compare billing/shipping state
-    fraud_score += billing_state === shipping_state ? 0 : 25;
-    //see if order total is unusually high
-    fraud_score += std_devs_from_aov > 2 ? 0 : 25;
+    //compare billing and shipping state
+    fraud_score += billing_state === shipping_state ? 0 : algWeight;
+    //Check if order total is unusually high
+    fraud_score += std_devs_from_aov > acceptableAOVStdDev ? 0 : algWeight;
     return user_id;
   })
-
 
   //*** INFO FROM USER ***
   //Search for a user's devices
   .then(user_id => db.searchDevices(user_id))
   // determine if # of devices is high
-  .then(deviceResult => fraud_score += deviceResult.length > 3 ? 0 : 25)
+  .then(deviceResult => fraud_score += deviceResult.length > acceptableNumOfDevices ? 0 : algWeight)
 
   //*** INFO FROM INVENTORY ***
   //Determine if order has items from high-risk categories
@@ -225,10 +229,10 @@ app.post('/fraud', (req, res) => {
   //Get category fraud risk for each item
   .then(category_ids => Promise.all(category_ids[0].map(({category_id}) => db.getCategoryFraudRisk(category_id))))
   //Sum category fraud risk scores
-  .then(arrayOfCategoryFraudRisk => arrayOfCategoryFraudRisk.reduce((acc, cur) => acc + parseInt(cur[0].fraud_risk), 0))
+  .then(arrayOfCategoryFraudRisk => arrayOfCategoryFraudRisk.reduce((acc, cur) => acc + cur[0].fraud_risk, 0))
   .then(totalCategoriesFraudRisk => {
     //Increment fraud score if category risk is over 30
-    fraud_score += totalCategoriesFraudRisk < 30 ? 0 : 25; 
+    fraud_score += totalCategoriesFraudRisk < 30 ? 0 : algWeight; 
     //Update fraud score for order in database
     db.updateFraudScore(user_id, fraud_score);
     res.send('total fraud risk ' + fraud_score); 
