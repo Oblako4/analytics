@@ -52,11 +52,9 @@ const categories = [
 
 //Add Amazon's main categories
 app.get('/categories', (req, res) => 
-  Promise.all(
-    categories.map((category, index) => db.addNewCategory(category, index))
-    )
-    .then(success => res.send(success))
-    .catch(err => console.log(err))
+  Promise.all(categories.map((category, index) => db.addNewCategory(category, index)))
+  .then(success => res.send(success))
+  .catch(err => console.log(err))
 );
 
 //Generate 100 orders (1% fraud rate)
@@ -116,19 +114,20 @@ app.get('/orders', (req, res) => {
       promisesArray.push(db.addNewItemFromOrder(item.item_id, item.category_id, item.order_id, item.quantity));
     });
 
-    promisesArray.push(db.addNewOrder(
-      order.order.order_id, 
-      order.order.user_id, 
-      order.order.billing_state, 
-      order.order.billing_zip,
-      order.order.billing_country,
-      order.order.shipping_state, 
-      order.order.shipping_zip,
-      order.order.shipping_country,
-      order.order.total_price,
-      order.order.purchased_at,
-      order.order.std_devs_from_aov
-    ));
+    promisesArray.push(
+      db.addNewOrder(
+        order.order.order_id, 
+        order.order.user_id, 
+        order.order.billing_state, 
+        order.order.billing_zip,
+        order.order.billing_country,
+        order.order.shipping_state, 
+        order.order.shipping_zip,
+        order.order.shipping_country,
+        order.order.total_price,
+        order.order.purchased_at,
+        order.order.std_devs_from_aov
+      ));
   });
 
   //fraud order
@@ -157,32 +156,35 @@ app.get('/orders', (req, res) => {
       fraudOrder.total_price,
       fraudOrder.purchased_at,
       fraudOrder.std_devs_from_aov
-      )
+    )
   );
   return Promise.all(promisesArray)
   .then(success => res.send(success))
   .catch(err => console.log(err))
 });
 
-//Generate a random device
+//Generate 10 random devices
 app.get('/devices', (req, res) => {
   let deviceList = ['nexus', 'iphone', 'ipad'];
   let osList = ['android', 'ios', 'windows'];
   let promisesArray = [];
-  let device = {};
-  device.user_id = Math.floor(Math.random() * 10000000);
-  device.device_name = deviceList[Math.floor(Math.random() * deviceList.length)];
-  device.device_os = osList[Math.floor(Math.random() * osList.length)];
-  device.logged_in_at = moment(faker.date.between('2017-07-25', '2017-10-25')).format("YYYY-MM-DD HH:mm:ss");
 
-  promisesArray.push(
-    db.addNewDevice(
-      device.user_id, 
-      device.device_name, 
-      device.device_os, 
-      device.logged_in_at
-    )
-  );
+  _.times(10, _ => {
+    let device = {};
+    device.user_id = Math.floor(Math.random() * 10000000);
+    device.device_name = deviceList[Math.floor(Math.random() * deviceList.length)];
+    device.device_os = osList[Math.floor(Math.random() * osList.length)];
+    device.logged_in_at = moment(faker.date.between('2017-07-25', '2017-10-25')).format("YYYY-MM-DD HH:mm:ss");
+
+    promisesArray.push(
+      db.addNewDevice(
+        device.user_id, 
+        device.device_name, 
+        device.device_os, 
+        device.logged_in_at
+      )
+    );
+  });
   return Promise.all(promisesArray)
   .then(success => res.send(success))
   .catch(err => console.log(err))
@@ -204,7 +206,7 @@ app.post('/fraud', (req, res) => {
     //compare billing/shipping state
     fraud_score += billing_state === shipping_state ? 0 : 25;
     //see if order total is unusually high
-    fraud_score += Math.abs(std_devs_from_aov) < 2 ? 0 : 25;
+    fraud_score += std_devs_from_aov > 2 ? 0 : 25;
     return user_id;
   })
 
