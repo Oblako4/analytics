@@ -59,7 +59,7 @@ app.get('/categories', (req, res) =>
 
 //Generate 100 orders (1% fraud rate)
 app.get('/orders', (req, res) => {
-  let promisesArray = [];
+  const promisesArray = [];
   let order_id = 0;
 
   //Generate 99 legit orders
@@ -100,8 +100,6 @@ app.get('/orders', (req, res) => {
     order.order.std_devs_from_aov = Math.floor(Math.random() * 3);
 
     // Generate 2 items in order
-    let items = [];
-
     _.times(2, () => {
       let item = {
         item_id: 123456789012,
@@ -130,7 +128,7 @@ app.get('/orders', (req, res) => {
       ));
   });
 
-  //fraud order
+  //Generate fraud order
   let fraudOrder = {};
   fraudOrder.id = Math.floor(Math.random() * 10000000);
   fraudOrder.billing_state = faker.address.stateAbbr();
@@ -167,7 +165,7 @@ app.get('/orders', (req, res) => {
 app.get('/devices', (req, res) => {
   let deviceList = ['nexus', 'iphone', 'ipad'];
   let osList = ['android', 'ios', 'windows'];
-  let promisesArray = [];
+  const promisesArray = [];
 
   _.times(10, _ => {
     let device = {};
