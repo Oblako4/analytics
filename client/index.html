@@ -7,9 +7,10 @@
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
 <form>
   <input type="text" name="Enter number . . ." class="number">
-  <button type="button" class="categories">Generate categories</button>
-  <button type="button" class="orders">Generate orders</button>
+  <button type="button" class="categories">Generate all categories</button>
+  <button type="button" class="orders">Generate 20k orders</button>
   <button type="button" class="devices">Generate devices</button>
+  <button type="button" class="fraud">Check for fraud</button>
 </form>
 
 <script>
@@ -34,6 +35,39 @@
         method: 'GET',
         contentType: 'application/json',
         url: '/devices'
+      });
+    });
+    $('.fraud').click(function(){
+      $.ajax({
+        method: 'POST',
+        contentType: 'application/json',
+        url: '/fraud',
+        data: JSON.stringify({
+          order: {
+            order_id: 354,
+            user_id: 1, 
+            billing_state: 'MA',
+            billing_ZIP: 01609,
+            billing_country: 'US',
+            shipping_state: 'MI',
+            shipping_zip: 48127,
+            shipping_country: 'US',
+            total_price: 23.99,
+            purchased_At: null,
+            std_dev_from_aov: 4
+          },
+          items: [
+            {
+              item_id: 122,
+              quantity: 3
+            },
+            {
+              item_id: 456,
+              quantity: 2
+            }
+          ]
+        }),
+        success: data => console.log(data)
       });
     });
   });

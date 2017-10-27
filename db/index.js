@@ -23,10 +23,10 @@ const addNewCategory = (category, id) => {
   });
 }
 
-const addNewItemFromOrder = (id, category_id, order_id, quantity) => {
+const addNewItemFromOrder = (category_id, order_id, quantity) => {
   return connection.queryAsync(
-    `INSERT IGNORE INTO item (id, category_id, order_id, quantity) 
-    VALUES ("${id}", "${category_id}", "${order_id}", "${quantity}")`)
+    `INSERT IGNORE INTO item (category_id, order_id, quantity) 
+    VALUES ("${category_id}", "${order_id}","${quantity}")`)
   .then((response) => {
     return response;
   })
@@ -48,7 +48,6 @@ const addNewDevice = (user_id, device_name, device_os, logged_in_at) => {
 }
 
 const addNewOrder = (
-   id, 
    user_id, 
    billing_state, 
    billing_zip,
@@ -62,7 +61,6 @@ const addNewOrder = (
   ) => {
   return connection.queryAsync(
     `INSERT IGNORE INTO user_order (
-      id, 
       user_id, 
       billing_state, 
       billing_zip, 
@@ -74,7 +72,6 @@ const addNewOrder = (
       purchased_at, 
       std_devs_from_aov)
     VALUES (
-      "${id}", 
       "${user_id}", 
       "${billing_state}", 
       "${billing_zip}", 
@@ -87,11 +84,61 @@ const addNewOrder = (
       "${std_devs_from_aov}")`
     )
   .then(response => {
-    console.log(response);
+    // console.log(response);
     return response;
   })
   .catch(response => {
-    console.log(response);
+    // console.log(response);
+    return response;
+  });
+}
+
+const searchOrders = id => {
+  return connection.queryAsync(`SELECT * FROM user_order WHERE id = "${id}"`)
+  .then(response => {
+    return response;
+  })
+  .catch(response => {
+    return response;
+  });
+}
+
+const searchDevices = user_id => {
+  return connection.queryAsync(`SELECT * FROM device WHERE user_id = "${user_id}"`)
+  .then(response => {
+    return response;
+  })
+  .catch(response => {
+    return response;
+  });
+}
+
+const searchItems = item_id => {
+  return connection.queryAsync(`SELECT category_id FROM item WHERE id = "${item_id}"`)
+  .then(response => {
+    return response;
+  })
+  .catch(response => {
+    return response;
+  });
+}
+
+const getCategoryFraudRisk = category_id => {
+  return connection.queryAsync(`SELECT fraud_risk FROM category WHERE id = "${category_id}"`)
+  .then(response => {
+    return response;
+  })
+  .catch(response => {
+    return response;
+  });
+}
+
+const updateFraudScore = (user_id, fraud_score) => {
+  return connection.queryAsync(`UPDATE user_order SET fraud_score = "${fraud_score}" WHERE user_id = "${user_id}"`)
+  .then(response => {
+    return response;
+  })
+  .catch(response => {
     return response;
   });
 }
@@ -100,5 +147,10 @@ module.exports = {
   addNewCategory,
   addNewOrder,
   addNewItemFromOrder,
-  addNewDevice
+  addNewDevice,
+  searchOrders,
+  searchDevices,
+  searchItems,
+  getCategoryFraudRisk,
+  updateFraudScore
 }
