@@ -57,64 +57,64 @@ app.get('/categories', (req, res) =>
   .catch(err => console.log(err))
 );
 
-//Generate 100 orders (1% fraud rate)
+//Generate 20,000 orders (1% fraud rate)
 app.get('/orders', (req, res) => {
+  const generations = 20000;
   const promisesArray = [];
-  let order_id = 0;
 
-  //Generate 99 legit orders
-  _.times(99, () => {
+  //Generate 99% legit orders
+  _.times(generations * 0.99, x => {
+    let randomNum = Math.floor(Math.random() * 10000000);
     let order = {
       order: {
-        order_id: 123456789, 
-        user_id: 123456789, 
-        billing_state: 'MA',
-        billing_ZIP: 01609,
-        billing_country: 'US',
-        shipping_state: 'MI',
-        shipping_zip: 48127,
-        shipping_country: 'US',
-        total_price: 23.99,
-        purchased_At: '', //will be a date object
-        std_dev_from_aov: -2
+      //   order_id: 123456789, 
+      //   user_id: 123456789, 
+      //   billing_state: 'MA',
+      //   billing_ZIP: 01609,
+      //   billing_country: 'US',
+      //   shipping_state: 'MI',
+      //   shipping_zip: 48127,
+      //   shipping_country: 'US',
+      //   total_price: 23.99,
+      //   purchased_At: '', //will be a date object
+      //   std_dev_from_aov: -2
       },
-      items: [
-        {
-          item_id: 123456789012,
-          quantity: 3
-        },
-        {
-          item_id: 123456789011,
-          quantity: 2
-        }
-      ]
+      // items: [
+      //   {
+      //     item_id: 123456789012,
+      //     quantity: 3
+      //   },
+      //   {
+      //     item_id: 123456789011,
+      //     quantity: 2
+      //   }
+      // ]
     };
 
-    order.order.order_id = order_id = Math.floor(Math.random() * 10000000);
-    order.order.user_id = Math.floor(Math.random() * 10000000);
+    // order.order.order_id = order_id = Math.floor(Math.random() * 10000000);
+    order.order.user_id = randomNum;
     order.order.billing_state = order.order.shipping_state = faker.address.stateAbbr();
     order.order.billing_zip = order.order.shipping_zip = faker.address.zipCode();
     order.order.billing_country = order.order.shipping_country = 'USA';
     order.order.total_price = faker.commerce.price();
     order.order.purchased_at = moment(faker.date.between('2017-07-25', '2017-10-25')).format("YYYY-MM-DD HH:mm:ss");
-    order.order.std_devs_from_aov = Math.floor(Math.random() * 3);
+    order.order.std_devs_from_aov = Math.floor(Math.random() * 2);
 
     // Generate 2 items in order
-    _.times(2, () => {
+    _.times(2, x => {
       let item = {
         item_id: 123456789012,
         quantity: 3
       };
-      item.item_id = Math.floor(Math.random() * 10000000);
+      // item.item_id = Math.floor(Math.random() * 10000000);
       item.category_id = Math.floor(Math.random() * categories.length);
-      item.order_id = order_id;
+      item.order_id = randomNum;
       item.quantity = Math.floor(Math.random() * 4);
-      promisesArray.push(db.addNewItemFromOrder(item.item_id, item.category_id, item.order_id, item.quantity));
+      promisesArray.push(db.addNewItemFromOrder(item.category_id, item.order_id, item.quantity));
     });
 
     promisesArray.push(
       db.addNewOrder(
-        order.order.order_id, 
         order.order.user_id, 
         order.order.billing_state, 
         order.order.billing_zip,
@@ -128,46 +128,61 @@ app.get('/orders', (req, res) => {
       ));
   });
 
-  //Generate fraud order
-  let fraudOrder = {};
-  fraudOrder.id = Math.floor(Math.random() * 10000000);
-  fraudOrder.billing_state = faker.address.stateAbbr();
-  fraudOrder.billing_zip = faker.address.zipCode();
-  fraudOrder.billing_country = 'USA';
-  fraudOrder.shipping_state = faker.address.stateAbbr();
-  fraudOrder.shipping_zip = faker.address.zipCode();
-  fraudOrder.shipping_country = 'USA';
-  fraudOrder.total_price = faker.commerce.price();
-  fraudOrder.purchased_at = moment(faker.date.between('2017-07-25', '2017-10-25')).format("YYYY-MM-DD HH:mm:ss");
-  fraudOrder.std_devs_from_aov = Math.floor(Math.random() * 3);
+  //Generate 1% fraud order
+  _.times(generations * 0.01, x => {
+    let randomNum = Math.floor(Math.random() * 10000000);
+    let fraudOrder = {};
+    fraudOrder.user_id = randomNum;
+    fraudOrder.billing_state = faker.address.stateAbbr();
+    fraudOrder.billing_zip = faker.address.zipCode();
+    fraudOrder.billing_country = 'USA';
+    fraudOrder.shipping_state = faker.address.stateAbbr();
+    fraudOrder.shipping_zip = faker.address.zipCode();
+    fraudOrder.shipping_country = 'USA';
+    fraudOrder.total_price = faker.commerce.price();
+    fraudOrder.purchased_at = moment(faker.date.between('2017-07-25', '2017-10-25')).format("YYYY-MM-DD HH:mm:ss");
+    fraudOrder.std_devs_from_aov = Math.floor(Math.random() * 5);
 
-  promisesArray.push(
-    db.addNewOrder(
-      fraudOrder.id, 
-      fraudOrder.user_id, 
-      fraudOrder.billing_state, 
-      fraudOrder.billing_zip,
-      fraudOrder.billing_country,
-      fraudOrder.shipping_state, 
-      fraudOrder.shipping_zip,
-      fraudOrder.shipping_country,
-      fraudOrder.total_price,
-      fraudOrder.purchased_at,
-      fraudOrder.std_devs_from_aov
-    )
-  );
+    // Generate 2 items in order
+    _.times(2, () => {
+      let item = {
+        item_id: 123456789012,
+        quantity: 3
+      };
+      // item.item_id = Math.floor(Math.random() * 10000000);
+      item.category_id = Math.floor(Math.random() * categories.length);
+      item.order_id = randomNum;
+      item.quantity = Math.floor(Math.random() * 4);
+      promisesArray.push(db.addNewItemFromOrder(item.category_id, item.order_id, item.quantity));
+    });
+
+    promisesArray.push(
+      db.addNewOrder(
+        fraudOrder.user_id, 
+        fraudOrder.billing_state, 
+        fraudOrder.billing_zip,
+        fraudOrder.billing_country,
+        fraudOrder.shipping_state, 
+        fraudOrder.shipping_zip,
+        fraudOrder.shipping_country,
+        fraudOrder.total_price,
+        fraudOrder.purchased_at,
+        fraudOrder.std_devs_from_aov
+      )
+    );
+  })
   return Promise.all(promisesArray)
   .then(success => res.send(success))
   .catch(err => console.log(err))
 });
 
-//Generate 10 random devices
+//Generate 50k random devices
 app.get('/devices', (req, res) => {
   let deviceList = ['nexus', 'iphone', 'ipad'];
   let osList = ['android', 'ios', 'windows'];
   const promisesArray = [];
 
-  _.times(10, _ => {
+  _.times(50000, x => {
     let device = {};
     device.user_id = Math.floor(Math.random() * 10000000);
     device.device_name = deviceList[Math.floor(Math.random() * deviceList.length)];
@@ -183,6 +198,7 @@ app.get('/devices', (req, res) => {
       )
     );
   });
+
   return Promise.all(promisesArray)
   .then(success => res.send(success))
   .catch(err => console.log(err))
@@ -196,7 +212,7 @@ app.post('/fraud', (req, res) => {
 
   let fraud_score = 0;
   const order_id = req.body.order.order_id;
-  const user_id = req.body.order.user_id;
+  let global_user_id;
   const items = req.body.items;
 
   //Search for order by order ID
@@ -210,6 +226,7 @@ app.post('/fraud', (req, res) => {
     fraud_score += billing_state === shipping_state ? 0 : algWeight;
     //Check if order total is unusually high
     fraud_score += std_devs_from_aov > acceptableAOVStdDev ? 0 : algWeight;
+    global_user_id = user_id;
     return user_id;
   })
 
@@ -221,7 +238,7 @@ app.post('/fraud', (req, res) => {
 
   //*** INFO FROM INVENTORY ***
   //Determine if order has items from high-risk categories
-  .then( _ => 
+  .then( x => 
     //Get category id for each item in order
     Promise.all(items.map(({item_id}) => db.searchItems(item_id))))
   //Get category fraud risk for each item
@@ -232,7 +249,7 @@ app.post('/fraud', (req, res) => {
     //Increment fraud score if category risk is over 30
     fraud_score += totalCategoriesFraudRisk < 30 ? 0 : algWeight; 
     //Update fraud score for order in database
-    db.updateFraudScore(user_id, fraud_score);
+    db.updateFraudScore(global_user_id, fraud_score);
     res.send('total fraud risk ' + fraud_score); 
   })
   .catch(err => console.log(err))

@@ -7,8 +7,8 @@
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
 <form>
   <input type="text" name="Enter number . . ." class="number">
-  <button type="button" class="categories">Generate categories</button>
-  <button type="button" class="orders">Generate orders</button>
+  <button type="button" class="categories">Generate all categories</button>
+  <button type="button" class="orders">Generate 20k orders</button>
   <button type="button" class="devices">Generate devices</button>
   <button type="button" class="fraud">Check for fraud</button>
 </form>
@@ -54,7 +54,7 @@
             shipping_country: 'US',
             total_price: 23.99,
             purchased_At: null,
-            std_dev_from_aov: -2
+            std_dev_from_aov: 4
           },
           items: [
             {
@@ -66,9 +66,8 @@
               quantity: 2
             }
           ]
-        }
-),
-        success: (data) => console.log(data)
+        }),
+        success: data => console.log(data)
       });
     });
   });
