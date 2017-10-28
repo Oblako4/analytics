@@ -11,10 +11,10 @@ const connection = Promise.promisifyAll(cbMysql);
 
 connection.connect();
 
-const addNewCategory = (category, id) => {
+const addNewCategory = (category, id, fraud_risk) => {
   return connection.queryAsync(
-    `INSERT IGNORE INTO category (name, id)
-    VALUES ("${category}", "${id}")`)
+    `INSERT IGNORE INTO category (name, id, fraud_risk)
+    VALUES ("${category}", "${id}", "${fraud_risk}")`)
   .then(response => {
     return response;
   })
