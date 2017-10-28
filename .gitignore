@@ -36,4 +36,4 @@ dist/
 node_modules/
 bower_components/
 
-/mysql-connector-java-5.1.44
+mysql-connector-java-5.1.44
