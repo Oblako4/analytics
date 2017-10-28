@@ -5,6 +5,11 @@ const faker = require('faker');
 const db = require('../db/index.js');
 const _ = require('lodash');
 const moment = require('moment');
+const elasticsearch = require('elasticsearch');
+const client = new elasticsearch.Client({
+  host: 'localhost:9200',
+  log: 'trace'
+});
 
 app.use(bodyParser.urlencoded({extended: true}));
 app.use(bodyParser.json());
@@ -50,141 +55,22 @@ const categories = [
   'Watches'
 ];
 
-//Add Amazon's main categories
+//Add Amazon's main categories and random fraud risk
 app.get('/categories', (req, res) => 
-  Promise.all(categories.map((category, index) => db.addNewCategory(category, index)))
+  Promise.all(categories.map((category, index) => db.addNewCategory(category, index, Math.floor(Math.random() * 100))))
   .then(success => res.send(success))
   .catch(err => console.log(err))
 );
 
-//Generate 20,000 orders (1% fraud rate)
-app.get('/orders', (req, res) => {
-  const generations = 20000;
-  const promisesArray = [];
-
-  //Generate 99% legit orders
-  _.times(generations * 0.99, x => {
-    let randomNum = Math.floor(Math.random() * 10000000);
-    let order = {
-      order: {
-      //   order_id: 123456789, 
-      //   user_id: 123456789, 
-      //   billing_state: 'MA',
-      //   billing_ZIP: 01609,
-      //   billing_country: 'US',
-      //   shipping_state: 'MI',
-      //   shipping_zip: 48127,
-      //   shipping_country: 'US',
-      //   total_price: 23.99,
-      //   purchased_At: '', //will be a date object
-      //   std_dev_from_aov: -2
-      },
-      // items: [
-      //   {
-      //     item_id: 123456789012,
-      //     quantity: 3
-      //   },
-      //   {
-      //     item_id: 123456789011,
-      //     quantity: 2
-      //   }
-      // ]
-    };
-
-    // order.order.order_id = order_id = Math.floor(Math.random() * 10000000);
-    order.order.user_id = randomNum;
-    order.order.billing_state = order.order.shipping_state = faker.address.stateAbbr();
-    order.order.billing_zip = order.order.shipping_zip = faker.address.zipCode();
-    order.order.billing_country = order.order.shipping_country = 'USA';
-    order.order.total_price = faker.commerce.price();
-    order.order.purchased_at = moment(faker.date.between('2017-07-25', '2017-10-25')).format("YYYY-MM-DD HH:mm:ss");
-    order.order.std_devs_from_aov = Math.floor(Math.random() * 2);
-
-    // Generate 2 items in order
-    _.times(2, x => {
-      let item = {
-        item_id: 123456789012,
-        quantity: 3
-      };
-      // item.item_id = Math.floor(Math.random() * 10000000);
-      item.category_id = Math.floor(Math.random() * categories.length);
-      item.order_id = randomNum;
-      item.quantity = Math.floor(Math.random() * 4);
-      promisesArray.push(db.addNewItemFromOrder(item.category_id, item.order_id, item.quantity));
-    });
-
-    promisesArray.push(
-      db.addNewOrder(
-        order.order.user_id, 
-        order.order.billing_state, 
-        order.order.billing_zip,
-        order.order.billing_country,
-        order.order.shipping_state, 
-        order.order.shipping_zip,
-        order.order.shipping_country,
-        order.order.total_price,
-        order.order.purchased_at,
-        order.order.std_devs_from_aov
-      ));
-  });
-
-  //Generate 1% fraud order
-  _.times(generations * 0.01, x => {
-    let randomNum = Math.floor(Math.random() * 10000000);
-    let fraudOrder = {};
-    fraudOrder.user_id = randomNum;
-    fraudOrder.billing_state = faker.address.stateAbbr();
-    fraudOrder.billing_zip = faker.address.zipCode();
-    fraudOrder.billing_country = 'USA';
-    fraudOrder.shipping_state = faker.address.stateAbbr();
-    fraudOrder.shipping_zip = faker.address.zipCode();
-    fraudOrder.shipping_country = 'USA';
-    fraudOrder.total_price = faker.commerce.price();
-    fraudOrder.purchased_at = moment(faker.date.between('2017-07-25', '2017-10-25')).format("YYYY-MM-DD HH:mm:ss");
-    fraudOrder.std_devs_from_aov = Math.floor(Math.random() * 5);
-
-    // Generate 2 items in order
-    _.times(2, () => {
-      let item = {
-        item_id: 123456789012,
-        quantity: 3
-      };
-      // item.item_id = Math.floor(Math.random() * 10000000);
-      item.category_id = Math.floor(Math.random() * categories.length);
-      item.order_id = randomNum;
-      item.quantity = Math.floor(Math.random() * 4);
-      promisesArray.push(db.addNewItemFromOrder(item.category_id, item.order_id, item.quantity));
-    });
-
-    promisesArray.push(
-      db.addNewOrder(
-        fraudOrder.user_id, 
-        fraudOrder.billing_state, 
-        fraudOrder.billing_zip,
-        fraudOrder.billing_country,
-        fraudOrder.shipping_state, 
-        fraudOrder.shipping_zip,
-        fraudOrder.shipping_country,
-        fraudOrder.total_price,
-        fraudOrder.purchased_at,
-        fraudOrder.std_devs_from_aov
-      )
-    );
-  })
-  return Promise.all(promisesArray)
-  .then(success => res.send(success))
-  .catch(err => console.log(err))
-});
-
-//Generate 50k random devices
+//Generate 1k random devices
 app.get('/devices', (req, res) => {
   let deviceList = ['nexus', 'iphone', 'ipad'];
   let osList = ['android', 'ios', 'windows'];
   const promisesArray = [];
 
-  _.times(50000, x => {
+  _.times(1000, x => {
     let device = {};
-    device.user_id = Math.floor(Math.random() * 10000000);
+    device.user_id = Math.floor(Math.random() * 10000);
     device.device_name = deviceList[Math.floor(Math.random() * deviceList.length)];
     device.device_os = osList[Math.floor(Math.random() * osList.length)];
     device.logged_in_at = moment(faker.date.between('2017-07-25', '2017-10-25')).format("YYYY-MM-DD HH:mm:ss");
@@ -247,11 +133,135 @@ app.post('/fraud', (req, res) => {
   .then(arrayOfCategoryFraudRisk => arrayOfCategoryFraudRisk.reduce((acc, cur) => acc + cur[0].fraud_risk, 0))
   .then(totalCategoriesFraudRisk => {
     //Increment fraud score if category risk is over 30
-    fraud_score += totalCategoriesFraudRisk < 30 ? 0 : algWeight; 
+    fraud_score += totalCategoriesFraudRisk < 80 ? 0 : algWeight; 
     //Update fraud score for order in database
     db.updateFraudScore(global_user_id, fraud_score);
     res.send('total fraud risk ' + fraud_score); 
   })
+  .catch(err => console.log(err))
+});
+
+app.get('/orders', (req, res) => {
+  const generations = 100;
+
+  //Generate 99% legit orders
+  const legitOrdersGenerated = [];
+  _.times(generations * 0.99, x => {
+    let randomState = faker.address.stateAbbr();
+    let randomZip = faker.address.zipCode();
+    let orderObj = {
+      order: {
+        user_id: Math.floor(Math.random() * 10000), 
+        billing_state: randomState,
+        billing_zip: randomZip,
+        billing_country: 'USA',
+        shipping_state: randomState,
+        shipping_zip: randomZip,
+        shipping_country: 'USA',
+        total_price: faker.commerce.price(),
+        purchased_at: moment(faker.date.between('2017-07-25', '2017-10-25')).utc().format("YYYY-MM-DD HH:mm:ss"),
+        std_dev_from_aov: Math.floor(Math.random() * 2)
+      },
+      // items: [
+      //   {
+      //     item_id: 123456789012,
+      //     quantity: 3
+      //   },
+      //   {
+      //     item_id: 123456789011,
+      //     quantity: 2
+      //   }
+      // ]
+    };
+
+    let o = orderObj.order;
+    return db.addNewOrder(
+      o.user_id, 
+      o.billing_state, 
+      o.billing_zip,
+      o.billing_country,
+      o.shipping_state, 
+      o.shipping_zip,
+      o.shipping_country,
+      o.total_price,
+      o.purchased_at,
+      o.std_devs_from_aov
+    )
+    .then(({insertId}) => {
+      // Generate 2 items in order
+      const itemsGenerated = [];
+        _.times(2, x => {
+          let item = {
+            category_id: Math.floor(Math.random() * categories.length),
+            order_id: insertId,
+            quantity: Math.floor(Math.random() * 4),
+          };
+          itemsGenerated.push(db.addNewItemFromOrder(item.category_id, item.order_id, item.quantity));
+        })
+      return Promise.all(itemsGenerated)
+    })
+  })
+  return Promise.all(legitOrdersGenerated)
+  .then(x => {
+    const fraudOrdersGenerated = [];
+    _.times(generations * 0.01, x => {
+      let orderObj = {
+        order: {
+          user_id: Math.floor(Math.random() * 10000), 
+          billing_state: faker.address.stateAbbr(),
+          billing_zip: faker.address.zipCode(),
+          billing_country: 'USA',
+          shipping_state: faker.address.stateAbbr(),
+          shipping_zip: faker.address.zipCode(),
+          shipping_country: 'USA',
+          total_price: faker.commerce.price(),
+          purchased_at: moment(faker.date.between('2017-07-25', '2017-10-25')).utc().format("YYYY-MM-DD HH:mm:ss"),
+          std_dev_from_aov: Math.floor(Math.random() * 8)
+        },
+        // items: [
+        //   {
+        //     item_id: 123456789012,
+        //     quantity: 3
+        //   },
+        //   {
+        //     item_id: 123456789011,
+        //     quantity: 2
+        //   }
+        // ]
+      };
+
+      let o = orderObj.order;
+      return db.addNewOrder(
+        o.user_id, 
+        o.billing_state, 
+        o.billing_zip,
+        o.billing_country,
+        o.shipping_state, 
+        o.shipping_zip,
+        o.shipping_country,
+        o.total_price,
+        o.purchased_at,
+        o.std_devs_from_aov
+        )
+      .then(({insertId}) => {
+        // Generate 2 items in order
+        const itemsGenerated = [];
+          _.times(2, x => {
+            _.times(2, x => {
+              let item = {
+                category_id: Math.floor(Math.random() * categories.length),
+                order_id: insertId,
+                quantity: Math.floor(Math.random() * 4),
+              };
+              itemsGenerated.push(db.addNewItemFromOrder(item.category_id, item.order_id, item.quantity));
+            })
+          })
+        return Promise.all(itemsGenerated)
+      })
+    })
+  return Promise.all(fraudOrdersGenerated)
+  })
+  .then(success => res.send(success))
   .catch(err => console.log(err))
 });
 
