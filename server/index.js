@@ -5,11 +5,11 @@ const faker = require('faker');
 const db = require('../db/index.js');
 const _ = require('lodash');
 const moment = require('moment');
-const elasticsearch = require('elasticsearch');
-const client = new elasticsearch.Client({
-  host: 'localhost:9200',
-  log: 'trace'
-});
+// const elasticsearch = require('elasticsearch');
+// const client = new elasticsearch.Client({
+//   host: 'localhost:9200',
+//   log: 'trace'
+// });
 
 app.use(bodyParser.urlencoded({extended: true}));
 app.use(bodyParser.json());
