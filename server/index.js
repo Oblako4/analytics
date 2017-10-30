@@ -2,7 +2,8 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const app = express();
 const faker = require('faker');
-const db = require('../db/index.js');
+// const db = require('../db/index.js');
+const db = require('../db/test.js');
 const _ = require('lodash');
 const moment = require('moment');
 // const elasticsearch = require('elasticsearch');
@@ -64,7 +65,7 @@ app.get('/categories', (req, res) =>
 
 //Generate 1k random devices
 app.get('/devices', (req, res) => {
-  let deviceList = ['nexus', 'iphone', 'ipad'];
+  let deviceList = ['nexus', 'iphone', 'ipad', 'motorola'];
   let osList = ['android', 'ios', 'windows'];
   const promisesArray = [];
 
