@@ -1,10 +1,10 @@
-# Project Name
+# Amazon Fraud Detection
 
 The project description
 
 ## Roadmap
 
-View the project roadmap [here](LINK_TO_DOC)
+View the project roadmap [here](https://docs.google.com/document/d/1yUrJF_aQGdpDw04rqw1cqZuA0NfXfIHCjDpw7qbpk-Q/edit#)
 
 ## Contributing
 
@@ -25,8 +25,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
 ## Requirements
 
 - Node 6.9.x
-- Redis 3.2.x
-- Postgresql 9.6.x
 - etc
 
 ## Other Information

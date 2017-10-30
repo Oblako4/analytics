@@ -11,10 +11,12 @@
     "express": "^4.16.2",
     "faker": "^4.1.0",
     "lodash": "^4.17.4",
+    "mocha": "^4.0.1",
     "moment": "^2.19.1",
     "mysql": "^2.15.0",
     "nodemon": "^1.12.1",
     "request": "^2.83.0",
+    "request-promise": "^4.2.2",
     "sequelize": "^4.17.2"
   },
   "devDependencies": {
@@ -22,7 +24,8 @@
     "eslint-plugin-react": "^7.4.0"
   },
   "scripts": {
-    "start": "nodemon ./server/index.js"
+    "start": "nodemon ./server/index.js",
+    "test": "mocha ./server/spec/server-spec.js"
   },
   "repository": {
     "type": "git",
