@@ -2,6 +2,7 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const app = express();
 const db = require('../db/index.js');
+const QueueUrl = require ('../config.js');
 // Uncomment below to test database
 // const db = require('../db/test.js');
 
@@ -14,7 +15,6 @@ AWS.config.loadFromPath('./config.json');
 
 // SQS service object
 const sqs = new AWS.SQS({apiVersion: '2012-11-05'});
-const QueueUrl = "https://sqs.us-west-1.amazonaws.com/810323078514/oblako-analytics";
 // ***************
 
 app.use(bodyParser.urlencoded({extended: true}));
