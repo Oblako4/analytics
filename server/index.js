@@ -2,8 +2,9 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const app = express();
 const faker = require('faker');
-// const db = require('../db/index.js');
-const db = require('../db/test.js');
+const db = require('../db/index.js');
+// Uncomment below to test database
+// const db = require('../db/test.js');
 const _ = require('lodash');
 const moment = require('moment');
 // const elasticsearch = require('elasticsearch');
@@ -94,13 +95,14 @@ app.get('/devices', (req, res) => {
 app.post('/fraud', (req, res) => {
   //Algorithm parameters
   const algWeight = 25;
-  const acceptableAOVStdDev = 2;
-  const acceptableNumOfDevices = 3;
+  const acceptableAOVStdDev = 3;
+  const acceptableNumOfDevices = 6;
 
   let fraud_score = 0;
-  const order_id = req.body.order.order_id;
+  let order_id = req.body.order.order_id;
+  // let order_id = ;
   let global_user_id;
-  const items = req.body.items;
+  // const items = req.body.items;
 
   //Search for order by order ID
   return db.searchOrders(order_id)
@@ -112,7 +114,7 @@ app.post('/fraud', (req, res) => {
     //compare billing and shipping state
     fraud_score += billing_state === shipping_state ? 0 : algWeight;
     //Check if order total is unusually high
-    fraud_score += std_devs_from_aov > acceptableAOVStdDev ? 0 : algWeight;
+    fraud_score += std_devs_from_aov < acceptableAOVStdDev ? 0 : algWeight;
     global_user_id = user_id;
     return user_id;
   })
@@ -121,15 +123,21 @@ app.post('/fraud', (req, res) => {
   //Search for a user's devices
   .then(user_id => db.searchDevices(user_id))
   // determine if # of devices is high
-  .then(deviceResult => fraud_score += deviceResult.length > acceptableNumOfDevices ? 0 : algWeight)
+  .then(deviceResult => fraud_score += deviceResult.length < acceptableNumOfDevices ? 0 : algWeight)
 
   //*** INFO FROM INVENTORY ***
   //Determine if order has items from high-risk categories
   .then( x => 
     //Get category id for each item in order
-    Promise.all(items.map(({item_id}) => db.searchItems(item_id))))
+    // Promise.all(items.map(({item_id}) => db.searchItems(item_id))))
+
+    //Until we receive items as part of order info...
+    db.getItemsFromOrder(order_id))
+  .then( result => result.map(item => item.category_id))
   //Get category fraud risk for each item
-  .then(category_ids => Promise.all(category_ids[0].map(({category_id}) => db.getCategoryFraudRisk(category_id))))
+  // .then(category_ids => Promise.all(category_ids[0].map(({category_id}) => db.getCategoryFraudRisk(category_id))))
+  .then(category_ids => Promise.all(category_ids.map((category_id) => db.getCategoryFraudRisk(category_id))))
+
   //Sum category fraud risk scores
   .then(arrayOfCategoryFraudRisk => arrayOfCategoryFraudRisk.reduce((acc, cur) => acc + cur[0].fraud_risk, 0))
   .then(totalCategoriesFraudRisk => {
@@ -137,13 +145,13 @@ app.post('/fraud', (req, res) => {
     fraud_score += totalCategoriesFraudRisk < 80 ? 0 : algWeight; 
     //Update fraud score for order in database
     db.updateFraudScore(global_user_id, fraud_score);
-    res.send('total fraud risk ' + fraud_score); 
+    res.send(`order id: ${order_id} total fraud risk ${fraud_score}`)
   })
   .catch(err => console.log(err))
 });
 
 app.get('/orders', (req, res) => {
-  const generations = 100;
+  const generations = 10000;
 
   //Generate 99% legit orders
   const legitOrdersGenerated = [];

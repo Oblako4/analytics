@@ -38,37 +38,24 @@
       });
     });
     $('.fraud').click(function(){
-      $.ajax({
-        method: 'POST',
-        contentType: 'application/json',
-        url: '/fraud',
-        data: JSON.stringify({
-          order: {
-            order_id: 354,
-            user_id: 1, 
-            billing_state: 'MA',
-            billing_ZIP: 01609,
-            billing_country: 'US',
-            shipping_state: 'MI',
-            shipping_zip: 48127,
-            shipping_country: 'US',
-            total_price: 23.99,
-            purchased_At: null,
-            std_dev_from_aov: 4
-          },
-          items: [
-            {
-              item_id: 122,
-              quantity: 3
-            },
-            {
-              item_id: 456,
-              quantity: 2
-            }
-          ]
-        }),
-        success: data => console.log(data)
-      });
+
+        (function myLoop (i) {          
+           setTimeout(function () {   
+             $.ajax({
+                method: 'POST',
+                contentType: 'application/json',
+                url: '/fraud',
+                data: JSON.stringify({
+                  order: {
+                    order_id: i
+                  }
+                }),
+                success: data => console.log(data)
+              });                       
+              if (--i) myLoop(i);      //  decrement i and call myLoop again if i > 0
+           }, 50)
+        })(7000); 
+
     });
   });
 </script>
