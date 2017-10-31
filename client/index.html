@@ -11,6 +11,8 @@
   <button type="button" class="orders">Generate 100 orders</button>
   <button type="button" class="devices">Generate devices</button>
   <button type="button" class="fraud">Check for fraud</button>
+  <button type="button" class="sendmessage">Send message</button>
+  <button type="button" class="receivemessage">Receive message</button>
 </form>
 
 <script>
@@ -19,7 +21,7 @@
       $.ajax({
         method: 'GET',
         contentType: 'application/json',
-        url: '/categories'
+        url: 'dataGeneration/categories'
       });
     });
     $('.orders').click(function(){
@@ -27,16 +29,17 @@
       $.ajax({
         method: 'GET',
         contentType: 'application/json',
-        url: '/orders'
+        url: 'dataGeneration/orders'
       });
     });
     $('.devices').click(function(){
       $.ajax({
         method: 'GET',
         contentType: 'application/json',
-        url: '/devices'
+        url: 'dataGeneration/devices'
       });
     });
+
     $('.fraud').click(function(){
 
         (function myLoop (i) {          
@@ -56,6 +59,22 @@
            }, 50)
         })(7000); 
 
+    });
+
+    $('.sendmessage').click(function(){
+      $.ajax({
+        method: 'GET',
+        contentType: 'application/json',
+        url: '/sendmessage'
+      });
+    });
+
+    $('.receivemessage').click(function(){
+      $.ajax({
+        method: 'GET',
+        contentType: 'application/json',
+        url: '/receivemessage'
+      });
     });
   });
 </script>
