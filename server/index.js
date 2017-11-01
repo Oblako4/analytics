@@ -2,12 +2,13 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const app = express();
 const db = require('../db/index.js');
-const QueueUrl = require ('../config.js');
+const queueUrl = require ('../config.js');
 // Uncomment below to test database
 // const db = require('../db/test.js');
 
 // ================== AWS ====================
 // Load the AWS SDK for Node.js
+const Consumer = require('sqs-consumer');
 const AWS = require('aws-sdk');
 
 // Load credentials and set the region from the JSON file
@@ -15,6 +16,26 @@ AWS.config.loadFromPath('./config.json');
 
 // SQS service object
 const sqs = new AWS.SQS({apiVersion: '2012-11-05'});
+
+//Polling for messages from Orders
+const sqsConsumer = Consumer.create({
+  queueUrl: queueUrl,
+  handleMessage: (message, done) => {
+    console.log('******HERE IS THE MESSAGE!!!!*****', message.Body);
+    // Save message to the database
+    // Start fraud analytics
+    done();
+  },
+  sqs: sqs
+});
+ 
+sqsConsumer.on('error', (err) => {
+  console.log(err.message);
+});
+ 
+sqsConsumer.start();
+
+
 // ===========================================
 
 app.use(bodyParser.urlencoded({extended: true}));
@@ -31,37 +52,37 @@ app.get('/sendmessage', (req, res) => {
   // Sending a message
   var params = {
    MessageBody: "This is a test message. Hello!!!",
-   QueueUrl: QueueUrl
+   QueueUrl: queueUrl
   };
 
   sqs.sendMessage(params).promise()
   .then(data => console.log("Success", data.MessageId))
   .then(x => res.send('success'))
   .catch(err => console.log(err));
-})
+});
 
-app.get('/receiveMessage', (req, res) => {
-  // Sending a message
-  var params = {
-   QueueUrl: QueueUrl
-  };
+// app.get('/receiveMessage', (req, res) => {
+//   // Sending a message
+//   var params = {
+//    queueUrl: queueUrl
+//   };
 
-  return sqs.receiveMessage(params).promise()
-  .then(data => {
-    console.log(data);
-    var deleteParams = {
-      QueueUrl: QueueUrl,
-      ReceiptHandle: data.Messages[0].ReceiptHandle
-    };
+//   return sqs.receiveMessage(params).promise()
+//   .then(data => {
+//     console.log(data);
+//     var deleteParams = {
+//       queueUrl: queueUrl,
+//       ReceiptHandle: data.Messages[0].ReceiptHandle
+//     };
 
-    return sqs.deleteMessage(deleteParams).promise()
-  })
-  .then(x => {
-    console.log('xxxxxx', x);
-    res.send('message received and deleted from queue!');
-  })
-  .catch(err => console.log(err));
-})
+//     return sqs.deleteMessage(deleteParams).promise()
+//   })
+//   .then(x => {
+//     console.log('xxxxxx', x);
+//     res.send('message received and deleted from queue!');
+//   })
+//   .catch(err => console.log(err));
+// })
 
 
 app.post('/fraud', (req, res) => {
@@ -122,9 +143,41 @@ app.post('/fraud', (req, res) => {
   .catch(err => console.log(err))
 });
 
+//=========Check if we have all order info in our database===============
+let check async (message) => {
 
-app.post('/fraudAsync', async (req, res) => {
+  if (message.user) {
+    //Message is from Users
+    //Check if we have devices for this user
+    let haveDevices = await db.searchDevices(message.user.id);
+    if (haveDevices) {
+      //Search for user's order with no fraud score
+      let unprocessedOrders = await db.getUnprocessedOrder(message.user.id);
+      let unprocessedOrder = unprocessedOrders[0];
+      //Check if we have categories from this user's order
+      let haveCategories = await db.getItemsFromOrder(unprocessedOrder.id);
+      if (haveCategories) {
+        //Send unprocessed order through to analysis
+        fraudAnalysis(unprocessedOrder.id);
+      }
+    }
+  } else if (message.items) {
+    //message is from Inventory
+    //TODO
+  } else {
+    //message is from Orders
+    //TODO
+  }
+
+  // let orderInfoCheck = await db.searchOrders(order_id);
+  // let user_idCheck = orderInfoCheck[0].user_id;
+  // let deviceResultCheck = await db.searchDevices(user_idCheck);
+  // let itemsFromOrderCheck = await db.getItemsFromOrder(order_id);
+});
+
+ const fraudAnalysis = async (orderId) => {
   try {
+
     //Algorithm parameters
     const algWeight = 25;
     const acceptableAOVStdDev = 3;
@@ -169,11 +222,14 @@ app.post('/fraudAsync', async (req, res) => {
     fraud_score += totalCategoriesFraudRisk < 80 ? 0 : algWeight; 
     //Update fraud score for order in database
     db.updateFraudScore(global_user_id, fraud_score);
-    res.send(`order id: ${order_id} total fraud risk ${fraud_score}`)
+
+    //Send message to Orders with order ID and fraud score
+    //TODO
+    // res.send(`order id: ${order_id} total fraud risk ${fraud_score}`)
   } catch(e) {
     await console.log(e);
   }
-});
+};
 
 app.listen(3000, function() {
   console.log('listening on port 3000!');

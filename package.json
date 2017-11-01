@@ -20,6 +20,7 @@
     "request": "^2.83.0",
     "request-promise": "^4.2.2",
     "sequelize": "^4.17.2",
+    "sqs-consumer": "^3.8.0",
     "uuid": "^3.1.0"
   },
   "devDependencies": {

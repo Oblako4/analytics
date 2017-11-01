@@ -103,6 +103,16 @@ const searchOrders = id => {
   });
 }
 
+const getUnprocessedOrder = user_id => {
+  return connection.queryAsync(`SELECT * FROM order WHERE user_id = "${user_id}"`)
+  .then(response => {
+    return response;
+  })
+  .catch(response => {
+    return response;
+  });
+}
+
 const getItemsFromOrder = id => {
   return connection.queryAsync(`SELECT category_id FROM item WHERE order_id = "${id}"`)
   .then(response => {
@@ -163,5 +173,6 @@ module.exports = {
   searchItems,
   getCategoryFraudRisk,
   updateFraudScore,
-  getItemsFromOrder
+  getItemsFromOrder,
+  getUnprocessedOrder
 }
