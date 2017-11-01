@@ -104,7 +104,7 @@ const searchOrders = id => {
 }
 
 const getUnprocessedOrder = user_id => {
-  return connection.queryAsync(`SELECT * FROM order WHERE user_id = "${user_id}"`)
+  return connection.queryAsync(`SELECT * FROM user_order WHERE user_id = "${user_id}"`)
   .then(response => {
     return response;
   })
