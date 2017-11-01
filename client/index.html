@@ -11,6 +11,7 @@
   <button type="button" class="orders">Generate 100 orders</button>
   <button type="button" class="devices">Generate devices</button>
   <button type="button" class="fraud">Check for fraud</button>
+  <button type="button" class="fraudAsync">Check for fraud and use async/await</button>
   <button type="button" class="sendmessage">Send message</button>
   <button type="button" class="receivemessage">Receive message</button>
 </form>
@@ -58,6 +59,27 @@
               if (--i) myLoop(i);      //  decrement i and call myLoop again if i > 0
            }, 50)
         })(7000); 
+
+    });
+
+    $('.fraudAsync').click(function(){
+
+        (function myLoop (i) {          
+           setTimeout(function () {   
+             $.ajax({
+                method: 'POST',
+                contentType: 'application/json',
+                url: '/fraud',
+                data: JSON.stringify({
+                  order: {
+                    order_id: i
+                  }
+                }),
+                success: data => console.log(data)
+              });                       
+              if (--i) myLoop(i);      //  decrement i and call myLoop again if i > 0
+           }, 50)
+        })(50); 
 
     });
 
