@@ -153,26 +153,26 @@ app.post('/fraudAsync', async (req, res) => {
     //*** INFO FROM INVENTORY ***
     //Determine if order has items from high-risk categories
 
-      //Get category id for each item in order
-      // Promise.all(items.map(({item_id}) => db.searchItems(item_id))))
+    //Get category id for each item in order
+    // Promise.all(items.map(({item_id}) => db.searchItems(item_id))))
 
-      //Until we receive items as part of order info...
-      let itemsFromOrder = await db.getItemsFromOrder(order_id);
-      let categoryIds = itemsFromOrder.map(item => item.category_id);
-      //Get category fraud risk for each item
-      let arrayOfCategoryFraudRisk = await Promise.all(category_ids.map(category_id => db.getCategoryFraudRisk(category_id)));
+    //Until we receive items as part of order info...
+    let itemsFromOrder = await db.getItemsFromOrder(order_id);
+    let categoryIds = itemsFromOrder.map(item => item.category_id);
+    //Get category fraud risk for each item
+    let arrayOfCategoryFraudRisk = await Promise.all(category_ids.map(category_id => db.getCategoryFraudRisk(category_id)));
 
-      //Sum category fraud risk scores
-      let totalCategoriesFraudRisk = arrayOfCategoryFraudRisk.reduce((acc, cur) => acc + cur[0].fraud_risk, 0);
+    //Sum category fraud risk scores
+    let totalCategoriesFraudRisk = arrayOfCategoryFraudRisk.reduce((acc, cur) => acc + cur[0].fraud_risk, 0);
 
-      //Increment fraud score if category risk is over 30
-      fraud_score += totalCategoriesFraudRisk < 80 ? 0 : algWeight; 
-      //Update fraud score for order in database
-      db.updateFraudScore(global_user_id, fraud_score);
-      res.send(`order id: ${order_id} total fraud risk ${fraud_score}`)
-    } catch(e) {
-      await console.log(e);
-    }
+    //Increment fraud score if category risk is over 30
+    fraud_score += totalCategoriesFraudRisk < 80 ? 0 : algWeight; 
+    //Update fraud score for order in database
+    db.updateFraudScore(global_user_id, fraud_score);
+    res.send(`order id: ${order_id} total fraud risk ${fraud_score}`)
+  } catch(e) {
+    await console.log(e);
+  }
 });
 
 app.listen(3000, function() {
