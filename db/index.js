@@ -103,6 +103,16 @@ const searchOrders = id => {
   });
 }
 
+const getItemsFromOrder = id => {
+  return connection.queryAsync(`SELECT category_id FROM item WHERE order_id = "${id}"`)
+  .then(response => {
+    return response;
+  })
+  .catch(response => {
+    return response;
+  });
+}
+
 const searchDevices = user_id => {
   return connection.queryAsync(`SELECT * FROM device WHERE user_id = "${user_id}"`)
   .then(response => {
@@ -152,5 +162,6 @@ module.exports = {
   searchDevices,
   searchItems,
   getCategoryFraudRisk,
-  updateFraudScore
+  updateFraudScore,
+  getItemsFromOrder
 }

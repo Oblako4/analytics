@@ -1,106 +1,80 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const app = express();
-const faker = require('faker');
-// const db = require('../db/index.js');
-const db = require('../db/test.js');
-const _ = require('lodash');
-const moment = require('moment');
-// const elasticsearch = require('elasticsearch');
-// const client = new elasticsearch.Client({
-//   host: 'localhost:9200',
-//   log: 'trace'
-// });
+const db = require('../db/index.js');
+const QueueUrl = require ('../config.js');
+// Uncomment below to test database
+// const db = require('../db/test.js');
+
+// ================== AWS ====================
+// Load the AWS SDK for Node.js
+const AWS = require('aws-sdk');
+
+// Load credentials and set the region from the JSON file
+AWS.config.loadFromPath('./config.json');
+
+// SQS service object
+const sqs = new AWS.SQS({apiVersion: '2012-11-05'});
+// ===========================================
 
 app.use(bodyParser.urlencoded({extended: true}));
 app.use(bodyParser.json());
 
-//serve up static html
+// Serve up static html
 app.use(express.static(__dirname + '/../client'));
 
-const categories = [
-  'Amazon Device Accessories',
-  'Amazon Kindle',
-  'Automotive & Powersports',
-  'Baby Products (Excluding Apparel)',
-  'Beauty',
-  'Books',
-  'Business Products (B2B)',
-  'Camera & Photo',
-  'Clothing & Accessories',
-  'Collectible Coins',
-  'Electronics (Accessories)',
-  'Fine Art',
-  'Grocery & Gourmet Food',
-  'Handmade',
-  'Health & Personal Care',
-  'Historical & Advertising Collectibles',
-  'Home & Garden',
-  'Industrial & Scientific',
-  'Jewelry',
-  'Luggage & Travel Accessories',
-  'Music',
-  'Musical Instruments',
-  'Sports Collectibles',
-  'Tools & Home Improvement',
-  'Personal Computers',
-  'Professional Services',
-  'Shoes, Handbags & Sunglasses',
-  'Software & Computer Games',
-  'Sports',
-  'Sports Collectibles',
-  'Tools & Home Improvement',
-  'Toys & Games',
-  'Video, DVD & Blu-Ray',
-  'Video Games & Video Game Consoles',
-  'Watches'
-];
+// Routing for data generation
+var dataGeneration = require('./routes/data-generation');
+app.use('/dataGeneration', dataGeneration);
 
-//Add Amazon's main categories and random fraud risk
-app.get('/categories', (req, res) => 
-  Promise.all(categories.map((category, index) => db.addNewCategory(category, index, Math.floor(Math.random() * 100))))
-  .then(success => res.send(success))
-  .catch(err => console.log(err))
-);
+app.get('/sendmessage', (req, res) => {
+  // Sending a message
+  var params = {
+   MessageBody: "This is a test message. Hello!!!",
+   QueueUrl: QueueUrl
+  };
 
-//Generate 1k random devices
-app.get('/devices', (req, res) => {
-  let deviceList = ['nexus', 'iphone', 'ipad', 'motorola'];
-  let osList = ['android', 'ios', 'windows'];
-  const promisesArray = [];
+  sqs.sendMessage(params).promise()
+  .then(data => console.log("Success", data.MessageId))
+  .then(x => res.send('success'))
+  .catch(err => console.log(err));
+})
 
-  _.times(1000, x => {
-    let device = {};
-    device.user_id = Math.floor(Math.random() * 10000);
-    device.device_name = deviceList[Math.floor(Math.random() * deviceList.length)];
-    device.device_os = osList[Math.floor(Math.random() * osList.length)];
-    device.logged_in_at = moment(faker.date.between('2017-07-25', '2017-10-25')).format("YYYY-MM-DD HH:mm:ss");
+app.get('/receiveMessage', (req, res) => {
+  // Sending a message
+  var params = {
+   QueueUrl: QueueUrl
+  };
 
-    promisesArray.push(
-      db.addNewDevice(
-        device.user_id, 
-        device.device_name, 
-        device.device_os, 
-        device.logged_in_at
-      )
-    );
-  });
+  return sqs.receiveMessage(params).promise()
+  .then(data => {
+    console.log(data);
+    var deleteParams = {
+      QueueUrl: QueueUrl,
+      ReceiptHandle: data.Messages[0].ReceiptHandle
+    };
 
-  return Promise.all(promisesArray)
-  .then(success => res.send(success))
-  .catch(err => console.log(err))
-});
+    return sqs.deleteMessage(deleteParams).promise()
+  })
+  .then(x => {
+    console.log('xxxxxx', x);
+    res.send('message received and deleted from queue!');
+  })
+  .catch(err => console.log(err));
+})
+
 
 app.post('/fraud', (req, res) => {
   //Algorithm parameters
   const algWeight = 25;
-  const acceptableAOVStdDev = 2;
-  const acceptableNumOfDevices = 3;
+  const acceptableAOVStdDev = 3;
+  const acceptableNumOfDevices = 6;
 
   let fraud_score = 0;
-  const order_id = req.body.order.order_id;
+  let order_id = req.body.order.order_id;
+  // let order_id = ;
   let global_user_id;
-  const items = req.body.items;
+  // const items = req.body.items;
 
   //Search for order by order ID
   return db.searchOrders(order_id)
@@ -112,7 +86,7 @@ app.post('/fraud', (req, res) => {
     //compare billing and shipping state
     fraud_score += billing_state === shipping_state ? 0 : algWeight;
     //Check if order total is unusually high
-    fraud_score += std_devs_from_aov > acceptableAOVStdDev ? 0 : algWeight;
+    fraud_score += std_devs_from_aov < acceptableAOVStdDev ? 0 : algWeight;
     global_user_id = user_id;
     return user_id;
   })
@@ -121,15 +95,21 @@ app.post('/fraud', (req, res) => {
   //Search for a user's devices
   .then(user_id => db.searchDevices(user_id))
   // determine if # of devices is high
-  .then(deviceResult => fraud_score += deviceResult.length > acceptableNumOfDevices ? 0 : algWeight)
+  .then(deviceResult => fraud_score += deviceResult.length < acceptableNumOfDevices ? 0 : algWeight)
 
   //*** INFO FROM INVENTORY ***
   //Determine if order has items from high-risk categories
   .then( x => 
     //Get category id for each item in order
-    Promise.all(items.map(({item_id}) => db.searchItems(item_id))))
+    // Promise.all(items.map(({item_id}) => db.searchItems(item_id))))
+
+    //Until we receive items as part of order info...
+    db.getItemsFromOrder(order_id))
+  .then( result => result.map(item => item.category_id))
   //Get category fraud risk for each item
-  .then(category_ids => Promise.all(category_ids[0].map(({category_id}) => db.getCategoryFraudRisk(category_id))))
+  // .then(category_ids => Promise.all(category_ids[0].map(({category_id}) => db.getCategoryFraudRisk(category_id))))
+  .then(category_ids => Promise.all(category_ids.map((category_id) => db.getCategoryFraudRisk(category_id))))
+
   //Sum category fraud risk scores
   .then(arrayOfCategoryFraudRisk => arrayOfCategoryFraudRisk.reduce((acc, cur) => acc + cur[0].fraud_risk, 0))
   .then(totalCategoriesFraudRisk => {
@@ -137,133 +117,62 @@ app.post('/fraud', (req, res) => {
     fraud_score += totalCategoriesFraudRisk < 80 ? 0 : algWeight; 
     //Update fraud score for order in database
     db.updateFraudScore(global_user_id, fraud_score);
-    res.send('total fraud risk ' + fraud_score); 
+    res.send(`order id: ${order_id} total fraud risk ${fraud_score}`)
   })
   .catch(err => console.log(err))
 });
 
-app.get('/orders', (req, res) => {
-  const generations = 100;
 
-  //Generate 99% legit orders
-  const legitOrdersGenerated = [];
-  _.times(generations * 0.99, x => {
-    let randomState = faker.address.stateAbbr();
-    let randomZip = faker.address.zipCode();
-    let orderObj = {
-      order: {
-        user_id: Math.floor(Math.random() * 10000), 
-        billing_state: randomState,
-        billing_zip: randomZip,
-        billing_country: 'USA',
-        shipping_state: randomState,
-        shipping_zip: randomZip,
-        shipping_country: 'USA',
-        total_price: faker.commerce.price(),
-        purchased_at: moment(faker.date.between('2017-07-25', '2017-10-25')).utc().format("YYYY-MM-DD HH:mm:ss"),
-        std_dev_from_aov: Math.floor(Math.random() * 2)
-      },
-      // items: [
-      //   {
-      //     item_id: 123456789012,
-      //     quantity: 3
-      //   },
-      //   {
-      //     item_id: 123456789011,
-      //     quantity: 2
-      //   }
-      // ]
-    };
+app.post('/fraudAsync', async (req, res) => {
+  try {
+    //Algorithm parameters
+    const algWeight = 25;
+    const acceptableAOVStdDev = 3;
+    const acceptableNumOfDevices = 6;
 
-    let o = orderObj.order;
-    return db.addNewOrder(
-      o.user_id, 
-      o.billing_state, 
-      o.billing_zip,
-      o.billing_country,
-      o.shipping_state, 
-      o.shipping_zip,
-      o.shipping_country,
-      o.total_price,
-      o.purchased_at,
-      o.std_devs_from_aov
-    )
-    .then(({insertId}) => {
-      // Generate 2 items in order
-      const itemsGenerated = [];
-        _.times(2, x => {
-          let item = {
-            category_id: Math.floor(Math.random() * categories.length),
-            order_id: insertId,
-            quantity: Math.floor(Math.random() * 4),
-          };
-          itemsGenerated.push(db.addNewItemFromOrder(item.category_id, item.order_id, item.quantity));
-        })
-      return Promise.all(itemsGenerated)
-    })
-  })
-  return Promise.all(legitOrdersGenerated)
-  .then(x => {
-    const fraudOrdersGenerated = [];
-    _.times(generations * 0.01, x => {
-      let orderObj = {
-        order: {
-          user_id: Math.floor(Math.random() * 10000), 
-          billing_state: faker.address.stateAbbr(),
-          billing_zip: faker.address.zipCode(),
-          billing_country: 'USA',
-          shipping_state: faker.address.stateAbbr(),
-          shipping_zip: faker.address.zipCode(),
-          shipping_country: 'USA',
-          total_price: faker.commerce.price(),
-          purchased_at: moment(faker.date.between('2017-07-25', '2017-10-25')).utc().format("YYYY-MM-DD HH:mm:ss"),
-          std_dev_from_aov: Math.floor(Math.random() * 8)
-        },
-        // items: [
-        //   {
-        //     item_id: 123456789012,
-        //     quantity: 3
-        //   },
-        //   {
-        //     item_id: 123456789011,
-        //     quantity: 2
-        //   }
-        // ]
-      };
+    let fraud_score = 0;
+    let order_id = req.body.order.order_id;
+    // const items = req.body.items;
 
-      let o = orderObj.order;
-      return db.addNewOrder(
-        o.user_id, 
-        o.billing_state, 
-        o.billing_zip,
-        o.billing_country,
-        o.shipping_state, 
-        o.shipping_zip,
-        o.shipping_country,
-        o.total_price,
-        o.purchased_at,
-        o.std_devs_from_aov
-        )
-      .then(({insertId}) => {
-        // Generate 2 items in order
-        const itemsGenerated = [];
-          _.times(2, x => {
-            _.times(2, x => {
-              let item = {
-                category_id: Math.floor(Math.random() * categories.length),
-                order_id: insertId,
-                quantity: Math.floor(Math.random() * 4),
-              };
-              itemsGenerated.push(db.addNewItemFromOrder(item.category_id, item.order_id, item.quantity));
-            })
-          })
-        return Promise.all(itemsGenerated)
-      })
-    })
-  return Promise.all(fraudOrdersGenerated)
-  })
-  .then(success => res.send(success))
-  .catch(err => console.log(err))
+    //Search for order by order ID
+
+    let orderInfo = await db.searchOrders(order_id)
+    //Grab only the first result
+    //*** INFO FROM ORDERS ***
+    let { billing_name, shipping_name, billing_state, shipping_state, user_id, std_devs_from_aov } = orderInfo[0];
+    fraud_score += billing_state === shipping_state ? 0 : algWeight;
+    //Check if order total is unusually high
+    fraud_score += std_devs_from_aov < acceptableAOVStdDev ? 0 : algWeight;
+
+    //*** INFO FROM USER ***
+    //Search for a user's devices
+    let deviceResult = await db.searchDevices(user_id);
+    // determine if # of devices is high
+    fraud_score += deviceResult.length < acceptableNumOfDevices ? 0 : algWeight;
+
+    //*** INFO FROM INVENTORY ***
+    //Determine if order has items from high-risk categories
+
+    //Get category id for each item in order
+    // Promise.all(items.map(({item_id}) => db.searchItems(item_id))))
+
+    //Until we receive items as part of order info...
+    let itemsFromOrder = await db.getItemsFromOrder(order_id);
+    let categoryIds = itemsFromOrder.map(item => item.category_id);
+    //Get category fraud risk for each item
+    let arrayOfCategoryFraudRisk = await Promise.all(category_ids.map(category_id => db.getCategoryFraudRisk(category_id)));
+
+    //Sum category fraud risk scores
+    let totalCategoriesFraudRisk = arrayOfCategoryFraudRisk.reduce((acc, cur) => acc + cur[0].fraud_risk, 0);
+
+    //Increment fraud score if category risk is over 30
+    fraud_score += totalCategoriesFraudRisk < 80 ? 0 : algWeight; 
+    //Update fraud score for order in database
+    db.updateFraudScore(global_user_id, fraud_score);
+    res.send(`order id: ${order_id} total fraud risk ${fraud_score}`)
+  } catch(e) {
+    await console.log(e);
+  }
 });
 
 app.listen(3000, function() {

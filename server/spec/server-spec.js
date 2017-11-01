@@ -20,8 +20,6 @@ describe('Analytics Database', function() {
     );
 
     dbConnection.connect();
-
-    // var tablename = 'category'; // TODO: fill this out
     
     /* Empty the db table before each test so that multiple tests
      * (or repeated runs of the tests) won't screw each other up: */
@@ -48,7 +46,7 @@ describe('Analytics Database', function() {
   });
 
   it('Should generate and save categories to the DB', function(done) {
-    request('http://localhost:3000/categories')
+    request('http://localhost:3000/dataGeneration/categories')
     .then(x => {
       var queryString = `SELECT * FROM category`;
       dbConnection.query(queryString, function(err, results) {
@@ -60,7 +58,7 @@ describe('Analytics Database', function() {
   });
 
   it('Should generate and save 1,000 devices to the DB', function(done) {
-    request('http://localhost:3000/devices')
+    request('http://localhost:3000/dataGeneration/devices')
     .then(x => {
       var queryString = `SELECT * FROM device`;
       dbConnection.query(queryString, function(err, results) {
@@ -72,7 +70,7 @@ describe('Analytics Database', function() {
   });
 
   it('Should generate and save 100 orders to the DB', function(done) {
-    request('http://localhost:3000/orders')
+    request('http://localhost:3000/dataGeneration/orders')
     .then(x => {
       var queryString = `SELECT * FROM user_order`;
       dbConnection.query(queryString, function(err, results) {

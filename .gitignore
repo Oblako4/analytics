@@ -3,6 +3,9 @@ config/development.json
 config/production.json
 config/staging.json
 config/test.json
+mysql-connector-java-5.1.44
+config.js
+config.json
 
 # OS X
 .DS_Store
@@ -36,4 +39,4 @@ dist/
 node_modules/
 bower_components/
 
-mysql-connector-java-5.1.44
+
