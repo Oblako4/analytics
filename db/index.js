@@ -25,7 +25,7 @@ const addNewCategory = (name, id) => {
 
 const addNewItemFromOrder = (id, order_id) => {
   return connection.queryAsync(
-    `INSERT IGNORE INTO item (id, order_id) 
+    `INSERT INTO item (id, order_id) 
     VALUES ("${id}", "${order_id}")`)
   .then((response) => {
     return response;
@@ -47,7 +47,7 @@ const clearDevices = user_id => {
 
 const addNewDevice = (user_id, device_name, device_os, logged_in_at) => {
   return connection.queryAsync(
-    `INSERT IGNORE INTO device (user_id, device_name, device_os, logged_in_at)
+    `INSERT INTO device (user_id, device_name, device_os, logged_in_at)
     VALUES ("${user_id}", "${device_name}", "${device_os}", "${logged_in_at}")`)
   .then((response) => {
     return response;
@@ -70,8 +70,9 @@ const addNewOrder = (
   purchased_at,
   std_dev_from_aov
   ) => {
+  console.log('ADD NEW ORDER IS RUNNING');
   return connection.queryAsync(
-    `INSERT IGNORE INTO user_order (
+    `INSERT INTO user_order (
       id,
       user_id, 
       billing_state, 
@@ -97,11 +98,11 @@ const addNewOrder = (
       "${std_dev_from_aov}")`
     )
   .then(response => {
-    // console.log(response);
+    // console.log('ADD NEW ORDER RESP', response);
     return response;
   })
   .catch(response => {
-    // console.log(response);
+    console.error(response);
     return response;
   });
 }
@@ -112,6 +113,7 @@ const searchOrders = id => {
     return response;
   })
   .catch(response => {
+    console.error(response);
     return response;
   });
 }
@@ -122,6 +124,7 @@ const getUserFromOrder = order_id => {
     return response;
   })
   .catch(response => {
+    console.error(response);
     return response;
   });
 }
@@ -132,6 +135,7 @@ const getUnprocessedOrder = user_id => {
     return response;
   })
   .catch(response => {
+    console.error(response);
     return response;
   });
 }
@@ -139,9 +143,11 @@ const getUnprocessedOrder = user_id => {
 const getItemsFromOrder = id => {
   return connection.queryAsync(`SELECT category_id FROM item WHERE order_id = "${id}"`)
   .then(response => {
+    // console.log(response);
     return response;
   })
   .catch(response => {
+    console.error(response);
     return response;
   });
 }
@@ -152,6 +158,7 @@ const searchDevices = user_id => {
     return response;
   })
   .catch(response => {
+    console.error(response);
     return response;
   });
 }
@@ -162,6 +169,7 @@ const searchItems = item_id => {
     return response;
   })
   .catch(response => {
+    console.error(response);
     return response;
   });
 }
@@ -172,6 +180,7 @@ const searchUserItems = user_id => {
     return response;
   })
   .catch(response => {
+    console.error(response);
     return response;
   });
 }
@@ -182,6 +191,7 @@ const getCategoryFraudRisk = category_id => {
     return response;
   })
   .catch(response => {
+    console.error(response);
     return response;
   });
 }
@@ -192,6 +202,7 @@ const updateFraudScore = (user_id, fraud_score) => {
     return response;
   })
   .catch(response => {
+    console.error(response);
     return response;
   });
 }
@@ -202,6 +213,7 @@ const updateCB = (id, chargedback_at) => {
     return response;
   })
   .catch(response => {
+    console.error(response);
     return response;
   });
 }
@@ -212,6 +224,7 @@ const updateCategoryId = (category_id, order_id) => {
     return response;
   })
   .catch(response => {
+    console.error(response);
     return response;
   });
 }

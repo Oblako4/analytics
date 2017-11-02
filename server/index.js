@@ -60,14 +60,18 @@ const haveAllOrderInfo = async message => {
           console.log('category name', category_name);
           console.log('category id', category_id);
            (async () => await db.addNewCategory(category_name, category_id))();
+        })
+    }
+        message.items.forEach(({category_name, category_id}) => {
           //Update item where order id 
            (async () => await db.updateCategoryId(category_id, message.order_id))();
         })
-    }
 
     // //Check if we have devices for this user
     let user_idResult = await db.getUserFromOrder(message.order_id);
+    console.log('user id result', user_idResult);
     let user_id = user_idResult[0].user_id;
+    console.log('user id', user_id);
     let haveDevices = await db.searchDevices(user_id);
     if (haveDevices.length > 0) {
       //Search for user's order with no fraud score
@@ -178,10 +182,12 @@ const haveAllOrderInfo = async message => {
 
     //Until we receive items as part of order info...
     let itemsFromOrder = await db.getItemsFromOrder(order_id);
+    console.log("itemsFromOrder", itemsFromOrder);
     let categoryIds = itemsFromOrder.map(item => item.category_id);
+    console.log('categoryIds', categoryIds);
     //Get category fraud risk for each item
     let arrayOfCategoryFraudRisk = await Promise.all(categoryIds.map(category_id => db.getCategoryFraudRisk(category_id)));
-
+    console.log('arrayOfCategoryFraudRisk', arrayOfCategoryFraudRisk);
     //Sum category fraud risk scores
     let totalCategoriesFraudRisk = arrayOfCategoryFraudRisk.reduce((acc, cur) => acc + cur[0].fraud_risk, 0);
 
@@ -189,7 +195,7 @@ const haveAllOrderInfo = async message => {
     fraud_score += totalCategoriesFraudRisk < 80 ? 0 : algWeight; 
     console.log('***FRAUD SCORE***' ,fraud_score);
     //Update fraud score for order in database
-    // db.updateFraudScore(user_id, fraud_score);
+    await db.updateFraudScore(user_id, fraud_score);
 
     //Send message to Orders with order ID and fraud score
       let ordersParams = {
