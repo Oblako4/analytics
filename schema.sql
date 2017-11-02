@@ -8,16 +8,16 @@ CREATE TABLE user_order (
   id INT,
   user_id INT,
   billing_state VARCHAR(50),
-  billing_zip VARCHAR(5),
+  billing_ZIP VARCHAR(5),
   billing_country VARCHAR(50),
   shipping_state VARCHAR(50),
-  shipping_zip VARCHAR(5),
+  shipping_ZIP VARCHAR(5),
   shipping_country VARCHAR(50),
   total_price DECIMAL(7, 2),
   fraud_score INT,
   purchased_at DATETIME,
   chargedback_at DATETIME,
-  std_devs_from_aov DECIMAL(7, 5),
+  std_dev_from_aov DECIMAL(7, 5),
   PRIMARY KEY (id)
 );
 

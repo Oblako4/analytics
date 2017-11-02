@@ -3,6 +3,7 @@ const bodyParser = require('body-parser');
 const app = express();
 const db = require('../db/index.js');
 const { usersInbox, usersOutbox, ordersInbox, ordersOutbox, inventoryInbox, inventoryOutbox } = require ('../config.js');
+const moment = require('moment');
 
 // Uncomment below to test database
 // const db = require('../db/test.js');
@@ -21,13 +22,14 @@ app.use('/dataGeneration', dataGeneration);
 //=========Check if we have all order info in our database===============
 const haveAllOrderInfo = async message => {
   message = JSON.parse(message);
+  console.log('*** HERE IS WHAT THE MESSAGE LOOKS LIKE***', message);
   if (message.user) {//Message is from Users
-
+    console.log('***Message is from Users***');
     //Clear devices for this user
-    await clearDevices(message.user.id);
+    await db.clearDevices(message.user.id);
     //Save devices for this user
     await Promise.all(
-      message.user.devices.map(({device_name, device_os, logged_in_at}) => db.addNewDevice(message.user.id, device_name, device_os, logged_in_at))
+      message.user.devices.map(({device_name, device_os, logged_in_at}) => db.addNewDevice(message.user.id, device_name, device_os, moment(logged_in_at).format("YYYY-MM-DD HH:mm:ss")))
     );
     
     //Search for user's order with no fraud score
@@ -40,8 +42,8 @@ const haveAllOrderInfo = async message => {
       fraudAnalysis(unprocessedOrder.id);
     }
 
-  } else if (message.items) {//Message is from Inventory
-
+  } else if (message.order_id) {//Message is from Inventory
+    console.log('***Message is from Inventory***');
     let haveCategories = await db.getCategoryFraudRisk(message.items[0].category_id);
     //Insert into the category table if the category does not exist with a random fraud score
     if (!haveCategories) {
@@ -67,24 +69,27 @@ const haveAllOrderInfo = async message => {
       }
     }
 
-  } else {//Message is from Orders
+  } else if (message.chargedback_at || message.order) {//Message is from Orders
+    console.log('***Message is from Orders***');
     if (message.chargedback_at) {//Update chargeback date
+      console.log('***Chargeback received***');
       //Update order table
-      await db.updateCB(message.order_id, message.chargedback_at);
+      await db.updateCB(message.order_id, moment(message.chargedback_at).format("YYYY-MM-DD HH:mm:ss"));
     } else {//Fraud analysis
+      console.log('***Analyzing for fraud***');
       //Save order to database
       await db.addNewOrder(
         message.order.order_id,
         message.order.user_id, 
         message.order.billing_state, 
-        message.order.billing_zip,
+        message.order.billing_ZIP,
         message.order.billing_country,
         message.order.shipping_state, 
-        message.order.shipping_zip,
+        message.order.shipping_ZIP,
         message.order.shipping_country,
         message.order.total_price,
-        message.order.purchased_at,
-        message.order.std_devs_from_aov
+        moment(message.order.purchased_at).format("YYYY-MM-DD HH:mm:ss"),
+        message.order.std_dev_from_aov
       );
       //Save items to database
       await Promise.all(message.items.map(item => db.addNewItemFromOrder(item.item_id, message.order.order_id)))
@@ -104,7 +109,7 @@ const haveAllOrderInfo = async message => {
       //Send message to Inventory
       let invParams = {
         MessageBody: JSON.stringify({
-          order_id: message.order_id,
+          order_id: message.order.order_id,
           items: message.items.map(({item_id}) => item_id)
         }),
        QueueUrl: inventoryOutbox
@@ -114,6 +119,8 @@ const haveAllOrderInfo = async message => {
       .then(data => console.log("Successfully sent message to Inventory"))
       .catch(err => console.log(err));
     }
+  } else {
+    console.log('Message looks weird!')
   }
 
 };
@@ -134,10 +141,10 @@ const haveAllOrderInfo = async message => {
     let orderInfo = await db.searchOrders(order_id)
     //Grab only the first result
     //*** INFO FROM ORDERS ***
-    let { billing_name, shipping_name, billing_state, shipping_state, user_id, std_devs_from_aov } = orderInfo[0];
+    let { billing_name, shipping_name, billing_state, shipping_state, user_id, std_dev_from_aov } = orderInfo[0];
     fraud_score += billing_state === shipping_state ? 0 : algWeight;
     //Check if order total is unusually high
-    fraud_score += std_devs_from_aov < acceptableAOVStdDev ? 0 : algWeight;
+    fraud_score += std_dev_from_aov < acceptableAOVStdDev ? 0 : algWeight;
 
     //*** INFO FROM USER ***
     //Search for a user's devices
@@ -196,6 +203,7 @@ const AWS = require('aws-sdk');
 AWS.config.loadFromPath('./config.json');
 
 // SQS service objects
+const sqs = new AWS.SQS({apiVersion: '2012-11-05'}); //For sending
 const sqsOrders = new AWS.SQS({apiVersion: '2012-11-05'});
 const sqsUsers = new AWS.SQS({apiVersion: '2012-11-05'});
 const sqsInventory = new AWS.SQS({apiVersion: '2012-11-05'});

@@ -61,40 +61,40 @@ const addNewOrder = (
   id,
   user_id, 
   billing_state, 
-  billing_zip,
+  billing_ZIP,
   billing_country,
   shipping_state, 
-  shipping_zip,
+  shipping_ZIP,
   shipping_country,
   total_price,
   purchased_at,
-  std_devs_from_aov
+  std_dev_from_aov
   ) => {
   return connection.queryAsync(
     `INSERT IGNORE INTO user_order (
       id,
       user_id, 
       billing_state, 
-      billing_zip, 
+      billing_ZIP, 
       billing_country, 
       shipping_state, 
-      shipping_zip, 
+      shipping_ZIP, 
       shipping_country, 
       total_price,  
       purchased_at, 
-      std_devs_from_aov)
+      std_dev_from_aov)
     VALUES (
       "${id}", 
       "${user_id}", 
       "${billing_state}", 
-      "${billing_zip}", 
+      "${billing_ZIP}", 
       "${billing_country}", 
       "${shipping_state}", 
-      "${shipping_zip}", 
+      "${shipping_ZIP}", 
       "${shipping_country}", 
       "${total_price}", 
       "${purchased_at}", 
-      "${std_devs_from_aov}")`
+      "${std_dev_from_aov}")`
     )
   .then(response => {
     // console.log(response);
