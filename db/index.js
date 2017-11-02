@@ -11,10 +11,10 @@ const connection = Promise.promisifyAll(cbMysql);
 
 connection.connect();
 
-const addNewCategory = (category, id) => {
+const addNewCategory = (name, id) => {
   return connection.queryAsync(
     `INSERT IGNORE INTO category (name, id, fraud_risk)
-    VALUES ("${category}", "${id}", "${Math.floor(Math.random() * 100)}")`)
+    VALUES ("${name}", "${id}", "${Math.floor(Math.random() * 100)}")`)
   .then(response => {
     return response;
   })
@@ -116,6 +116,16 @@ const searchOrders = id => {
   });
 }
 
+const getUserFromOrder = order_id => {
+  return connection.queryAsync(`SELECT user_id FROM user_order WHERE id = "${order_id}"`)
+  .then(response => {
+    return response;
+  })
+  .catch(response => {
+    return response;
+  });
+}
+
 const getUnprocessedOrder = user_id => {
   return connection.queryAsync(`SELECT * FROM user_order WHERE user_id = "${user_id}"`)
   .then(response => {
@@ -148,6 +158,16 @@ const searchDevices = user_id => {
 
 const searchItems = item_id => {
   return connection.queryAsync(`SELECT category_id FROM item WHERE id = "${item_id}"`)
+  .then(response => {
+    return response;
+  })
+  .catch(response => {
+    return response;
+  });
+}
+
+const searchUserItems = user_id => {
+  return connection.queryAsync(`SELECT item.id FROM item INNER JOIN user_order ON item.order_id = user_order.id WHERE user_order.user_id = "${user_id}"`)
   .then(response => {
     return response;
   })
@@ -210,5 +230,7 @@ module.exports = {
   getUnprocessedOrder,
   clearDevices,
   updateCB,
-  updateCategoryId
+  updateCategoryId,
+  searchUserItems,
+  getUserFromOrder
 }

@@ -31,42 +31,60 @@ const haveAllOrderInfo = async message => {
     await Promise.all(
       message.user.devices.map(({device_name, device_os, logged_in_at}) => db.addNewDevice(message.user.id, device_name, device_os, moment(logged_in_at).format("YYYY-MM-DD HH:mm:ss")))
     );
-    
-    //Search for user's order with no fraud score
-    let unprocessedOrders = await db.getUnprocessedOrder(message.user.id);
-    let unprocessedOrder = unprocessedOrders[0];
-    //Check if we have categories from this user's order
-    let haveCategories = await db.getItemsFromOrder(unprocessedOrder.id);
-    if (haveCategories) {
-      //Send unprocessed order through to analysis
-      fraudAnalysis(unprocessedOrder.id);
-    }
 
-  } else if (message.order_id) {//Message is from Inventory
-    console.log('***Message is from Inventory***');
-    let haveCategories = await db.getCategoryFraudRisk(message.items[0].category_id);
-    //Insert into the category table if the category does not exist with a random fraud score
-    if (!haveCategories) {
-      //Generate categories
-        message.items.forEach(({category_name, category_id}) => {
-           async () => await db.addNewCategory(category_name, category_id);
-          //Update item where order id 
-           async () => await db.updateCategoryId(category_id, message.order_id);
-        })
-
-    }
-    // //Check if we have devices for this user
-    let haveDevices = await db.searchDevices(message.order_id);
-    if (haveDevices) {
+    //Check if we have the category
+    let haveItems = await db.searchUserItems(message.user.id);
+    if (haveItems.length > 0) {
       //Search for user's order with no fraud score
       let unprocessedOrders = await db.getUnprocessedOrder(message.user.id);
       let unprocessedOrder = unprocessedOrders[0];
       //Check if we have categories from this user's order
       let haveCategories = await db.getItemsFromOrder(unprocessedOrder.id);
-      if (haveCategories) {
+      if (haveCategories.length > 0) {
         //Send unprocessed order through to analysis
         fraudAnalysis(unprocessedOrder.id);
       }
+    } else {
+      console.log('We do not have info from Inventory yet');
+    }
+
+  } else if (message.order_id) {//Message is from Inventory
+    console.log('***Message is from Inventory***');
+    let haveCategories = await db.getCategoryFraudRisk(message.items[0].category_id);
+    console.log('haveCategories', haveCategories);
+    //Insert into the category table if the category does not exist with a random fraud score
+    if (haveCategories.length === 0) {
+      console.log('We dont have categories');
+      //Generate categories
+        message.items.forEach(({category_name, category_id}) => {
+          console.log('category name', category_name);
+          console.log('category id', category_id);
+           (async () => await db.addNewCategory(category_name, category_id))();
+          //Update item where order id 
+           (async () => await db.updateCategoryId(category_id, message.order_id))();
+        })
+    }
+
+    // //Check if we have devices for this user
+    let user_idResult = await db.getUserFromOrder(message.order_id);
+    let user_id = user_idResult[0].user_id;
+    let haveDevices = await db.searchDevices(user_id);
+    if (haveDevices.length > 0) {
+      //Search for user's order with no fraud score
+      //Need to query the db for the user_id
+      // console.log('user id', user_id);
+      let unprocessedOrders = await db.getUnprocessedOrder(user_id);
+      // console.log('unprocessed orders', unprocessedOrders);
+      let unprocessedOrder = unprocessedOrders[0];
+      // console.log('unprocessed order', unprocessedOrder);
+      //Check if we have categories from this user's order
+      let haveCategories = await db.getItemsFromOrder(unprocessedOrder.id);
+      if (haveCategories.length > 0) {
+        //Send unprocessed order through to analysis
+        fraudAnalysis(unprocessedOrder.id);
+      }
+    } else {
+      console.log('We do not have info from Users yet');
     }
 
   } else if (message.chargedback_at || message.order) {//Message is from Orders
@@ -214,7 +232,7 @@ const sqsInventory = new AWS.SQS({apiVersion: '2012-11-05'});
 const sqsConsumerOrders = Consumer.create({
   queueUrl: ordersInbox,
   handleMessage: (message, done) => {
-    console.log('***MESSAGE FROM ORDERS', message);
+    // console.log('***MESSAGE FROM ORDERS', message);
     haveAllOrderInfo(message.Body);
     done();
   },
