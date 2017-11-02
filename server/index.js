@@ -2,7 +2,7 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const app = express();
 const db = require('../db/index.js');
-const queueUrl = require ('../config.js');
+const { usersInbox, usersOutbox, ordersInbox, ordersOutbox, inventoryInbox, inventoryOutbox } = require ('../config.js');
 
 // Uncomment below to test database
 // const db = require('../db/test.js');
@@ -46,13 +46,12 @@ const haveAllOrderInfo = async message => {
     //Insert into the category table if the category does not exist with a random fraud score
     if (!haveCategories) {
       //Generate categories
-      await Promise.all(
-        message.items.map(({category_name, category_id}) => {
-          await db.addNewCategory(category_name, category_id);
+        message.items.forEach(({category_name, category_id}) => {
+           async () => await db.addNewCategory(category_name, category_id);
           //Update item where order id 
-          await db.updateCategoryId(category_id, message.order_id);
+           async () => await db.updateCategoryId(category_id, message.order_id);
         })
-      );
+
     }
     // //Check if we have devices for this user
     let haveDevices = await db.searchDevices(message.order_id);
@@ -88,19 +87,18 @@ const haveAllOrderInfo = async message => {
         message.order.std_devs_from_aov
       );
       //Save items to database
-      await Promise.all(message.items.map(item => db.addNewItemFromOrder(item.id, message.order.order_id)))
+      await Promise.all(message.items.map(item => db.addNewItemFromOrder(item.item_id, message.order.order_id)))
       //Send message to Users
       let usersParams = {
         MessageBody: JSON.stringify({
           user_id: message.order.user_id,
           days: 30
         }),
-       QueueUrl: queueUrl
+       QueueUrl: usersOutbox
       };
 
       sqs.sendMessage(usersParams).promise()
-      .then(data => console.log("Success", data.MessageId))
-      .then(x => res.send('success'))
+      .then(data => console.log("Successfully sent message to Users"))
       .catch(err => console.log(err));
 
       //Send message to Inventory
@@ -109,12 +107,11 @@ const haveAllOrderInfo = async message => {
           order_id: message.order_id,
           items: message.items.map(({item_id}) => item_id)
         }),
-       QueueUrl: queueUrl
+       QueueUrl: inventoryOutbox
       };
 
       sqs.sendMessage(invParams).promise()
-      .then(data => console.log("Success", data.MessageId))
-      .then(x => res.send('success'))
+      .then(data => console.log("Successfully sent message to Inventory"))
       .catch(err => console.log(err));
     }
   }
@@ -170,8 +167,21 @@ const haveAllOrderInfo = async message => {
     // db.updateFraudScore(user_id, fraud_score);
 
     //Send message to Orders with order ID and fraud score
-    //TODO
-    // res.send(`order id: ${order_id} total fraud risk ${fraud_score}`)
+      let ordersParams = {
+        MessageBody: JSON.stringify({
+          order: {
+            order_id: order_id,
+            fraud_score: fraud_score
+          }
+        }),
+       QueueUrl: ordersOutbox
+      };
+
+      sqs.sendMessage(ordersParams).promise()
+      .then(data => console.log("Successfully sent message to Orders"))
+      .catch(err => console.log(err));
+
+
   } catch(e) {
     await console.log(e);
   }
@@ -185,44 +195,64 @@ const AWS = require('aws-sdk');
 // Load credentials and set the region from the JSON file
 AWS.config.loadFromPath('./config.json');
 
-// SQS service object
-const sqs = new AWS.SQS({apiVersion: '2012-11-05'});
+// SQS service objects
+const sqsOrders = new AWS.SQS({apiVersion: '2012-11-05'});
+const sqsUsers = new AWS.SQS({apiVersion: '2012-11-05'});
+const sqsInventory = new AWS.SQS({apiVersion: '2012-11-05'});
 
-//Polling for messages from Orders
-const sqsConsumer = Consumer.create({
-  queueUrl: queueUrl,
+//Polling for messages
+
+//Orders
+const sqsConsumerOrders = Consumer.create({
+  queueUrl: ordersInbox,
+  handleMessage: (message, done) => {
+    console.log('***MESSAGE FROM ORDERS', message);
+    haveAllOrderInfo(message.Body);
+    done();
+  },
+  sqs: sqsOrders
+});
+
+//Users
+const sqsConsumerUsers = Consumer.create({
+  queueUrl: usersInbox,
   handleMessage: (message, done) => {
     haveAllOrderInfo(message.Body);
     done();
   },
-  sqs: sqs
+  sqs: sqsUsers
+});
+
+//Inventory
+const sqsConsumerInventory = Consumer.create({
+  queueUrl: inventoryInbox,
+  handleMessage: (message, done) => {
+    haveAllOrderInfo(message.Body);
+    done();
+  },
+  sqs: sqsInventory
 });
  
-sqsConsumer.on('error', (err) => {
+sqsConsumerOrders.on('error', (err) => {
   console.log(err.message);
 });
  
-sqsConsumer.start();
+sqsConsumerOrders.start();
+
+sqsConsumerUsers.on('error', (err) => {
+  console.log(err.message);
+});
+ 
+sqsConsumerUsers.start();
+
+sqsConsumerInventory.on('error', (err) => {
+  console.log(err.message);
+});
+ 
+sqsConsumerInventory.start();
 
 
 // ===========================================
-
-app.get('/sendmessage', (req, res) => {
-  // Sending a message
-  var params = {
-    MessageBody: JSON.stringify({
-      user: {
-        id: 7134
-      }
-    }),
-   QueueUrl: queueUrl
-  };
-
-  sqs.sendMessage(params).promise()
-  .then(data => console.log("Success", data.MessageId))
-  .then(x => res.send('success'))
-  .catch(err => console.log(err));
-});
 
 app.listen(3000, function() {
   console.log('listening on port 3000!');
