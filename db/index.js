@@ -11,10 +11,10 @@ const connection = Promise.promisifyAll(cbMysql);
 
 connection.connect();
 
-const addNewCategory = (category, id, fraud_risk) => {
+const addNewCategory = (category, id) => {
   return connection.queryAsync(
     `INSERT IGNORE INTO category (name, id, fraud_risk)
-    VALUES ("${category}", "${id}", "${fraud_risk}")`)
+    VALUES ("${category}", "${id}", "${Math.floor(Math.random() * 100)}")`)
   .then(response => {
     return response;
   })
@@ -23,10 +23,20 @@ const addNewCategory = (category, id, fraud_risk) => {
   });
 }
 
-const addNewItemFromOrder = (category_id, order_id, quantity) => {
+const addNewItemFromOrder = (id, order_id) => {
   return connection.queryAsync(
-    `INSERT IGNORE INTO item (category_id, order_id, quantity) 
-    VALUES ("${category_id}", "${order_id}","${quantity}")`)
+    `INSERT IGNORE INTO item (id, order_id) 
+    VALUES ("${id}", "${order_id}")`)
+  .then((response) => {
+    return response;
+  })
+  .catch((response) => {
+    return response;
+  });
+}
+
+const clearDevices = user_id => {
+  return connection.queryAsync(`DELETE FROM device WHERE user_id = "${user_id}"`)
   .then((response) => {
     return response;
   })
@@ -48,19 +58,21 @@ const addNewDevice = (user_id, device_name, device_os, logged_in_at) => {
 }
 
 const addNewOrder = (
-   user_id, 
-   billing_state, 
-   billing_zip,
-   billing_country,
-   shipping_state, 
-   shipping_zip,
-   shipping_country,
-   total_price,
-   purchased_at,
-   std_devs_from_aov
+  id,
+  user_id, 
+  billing_state, 
+  billing_zip,
+  billing_country,
+  shipping_state, 
+  shipping_zip,
+  shipping_country,
+  total_price,
+  purchased_at,
+  std_devs_from_aov
   ) => {
   return connection.queryAsync(
     `INSERT IGNORE INTO user_order (
+      id,
       user_id, 
       billing_state, 
       billing_zip, 
@@ -72,6 +84,7 @@ const addNewOrder = (
       purchased_at, 
       std_devs_from_aov)
     VALUES (
+      "${id}", 
       "${user_id}", 
       "${billing_state}", 
       "${billing_zip}", 
@@ -163,6 +176,26 @@ const updateFraudScore = (user_id, fraud_score) => {
   });
 }
 
+const updateCB = (id, chargedback_at) => {
+  return connection.queryAsync(`UPDATE user_order SET chargedback_at = "${chargedback_at}" WHERE id = "${id}"`)
+  .then(response => {
+    return response;
+  })
+  .catch(response => {
+    return response;
+  });
+}
+
+const updateCategoryId = (category_id, order_id) => {
+  return connection.queryAsync(`UPDATE item SET category_id = "${category_id}" WHERE order_id = "${order_id}"`)
+  .then(response => {
+    return response;
+  })
+  .catch(response => {
+    return response;
+  });
+}
+
 module.exports = {
   addNewCategory,
   addNewOrder,
@@ -174,5 +207,8 @@ module.exports = {
   getCategoryFraudRisk,
   updateFraudScore,
   getItemsFromOrder,
-  getUnprocessedOrder
+  getUnprocessedOrder,
+  clearDevices,
+  updateCB,
+  updateCategoryId
 }

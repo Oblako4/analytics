@@ -3,6 +3,7 @@ const bodyParser = require('body-parser');
 const app = express();
 const db = require('../db/index.js');
 const queueUrl = require ('../config.js');
+
 // Uncomment below to test database
 // const db = require('../db/test.js');
 
@@ -21,8 +22,40 @@ app.use('/dataGeneration', dataGeneration);
 const haveAllOrderInfo = async message => {
   message = JSON.parse(message);
   if (message.user) {//Message is from Users
-    //Check if we have devices for this user
-    let haveDevices = await db.searchDevices(message.user.id);
+
+    //Clear devices for this user
+    await clearDevices(message.user.id);
+    //Save devices for this user
+    await Promise.all(
+      message.user.devices.map(({device_name, device_os, logged_in_at}) => db.addNewDevice(message.user.id, device_name, device_os, logged_in_at))
+    );
+    
+    //Search for user's order with no fraud score
+    let unprocessedOrders = await db.getUnprocessedOrder(message.user.id);
+    let unprocessedOrder = unprocessedOrders[0];
+    //Check if we have categories from this user's order
+    let haveCategories = await db.getItemsFromOrder(unprocessedOrder.id);
+    if (haveCategories) {
+      //Send unprocessed order through to analysis
+      fraudAnalysis(unprocessedOrder.id);
+    }
+
+  } else if (message.items) {//Message is from Inventory
+
+    let haveCategories = await db.getCategoryFraudRisk(message.items[0].category_id);
+    //Insert into the category table if the category does not exist with a random fraud score
+    if (!haveCategories) {
+      //Generate categories
+      await Promise.all(
+        message.items.map(({category_name, category_id}) => {
+          await db.addNewCategory(category_name, category_id);
+          //Update item where order id 
+          await db.updateCategoryId(category_id, message.order_id);
+        })
+      );
+    }
+    // //Check if we have devices for this user
+    let haveDevices = await db.searchDevices(message.order_id);
     if (haveDevices) {
       //Search for user's order with no fraud score
       let unprocessedOrders = await db.getUnprocessedOrder(message.user.id);
@@ -34,19 +67,58 @@ const haveAllOrderInfo = async message => {
         fraudAnalysis(unprocessedOrder.id);
       }
     }
-  } else if (message.items) {
-    //message is from Inventory
-    //TODO
-  } else {
-    //message is from Orders
-    //TODO
-    console.log(message);
+
+  } else {//Message is from Orders
+    if (message.chargedback_at) {//Update chargeback date
+      //Update order table
+      await db.updateCB(message.order_id, message.chargedback_at);
+    } else {//Fraud analysis
+      //Save order to database
+      await db.addNewOrder(
+        message.order.order_id,
+        message.order.user_id, 
+        message.order.billing_state, 
+        message.order.billing_zip,
+        message.order.billing_country,
+        message.order.shipping_state, 
+        message.order.shipping_zip,
+        message.order.shipping_country,
+        message.order.total_price,
+        message.order.purchased_at,
+        message.order.std_devs_from_aov
+      );
+      //Save items to database
+      await Promise.all(message.items.map(item => db.addNewItemFromOrder(item.id, message.order.order_id)))
+      //Send message to Users
+      let usersParams = {
+        MessageBody: JSON.stringify({
+          user_id: message.order.user_id,
+          days: 30
+        }),
+       QueueUrl: queueUrl
+      };
+
+      sqs.sendMessage(usersParams).promise()
+      .then(data => console.log("Success", data.MessageId))
+      .then(x => res.send('success'))
+      .catch(err => console.log(err));
+
+      //Send message to Inventory
+      let invParams = {
+        MessageBody: JSON.stringify({
+          order_id: message.order_id,
+          items: message.items.map(({item_id}) => item_id)
+        }),
+       QueueUrl: queueUrl
+      };
+
+      sqs.sendMessage(invParams).promise()
+      .then(data => console.log("Success", data.MessageId))
+      .then(x => res.send('success'))
+      .catch(err => console.log(err));
+    }
   }
 
-  // let orderInfoCheck = await db.searchOrders(order_id);
-  // let user_idCheck = orderInfoCheck[0].user_id;
-  // let deviceResultCheck = await db.searchDevices(user_idCheck);
-  // let itemsFromOrderCheck = await db.getItemsFromOrder(order_id);
 };
 
  const fraudAnalysis = async order_id => {
