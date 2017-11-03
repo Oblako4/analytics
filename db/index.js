@@ -19,6 +19,7 @@ const addNewCategory = (name, id) => {
     return response;
   })
   .catch(response => {
+    console.error(response);
     return response;
   });
 }
@@ -31,6 +32,7 @@ const addNewItemFromOrder = (id, order_id) => {
     return response;
   })
   .catch((response) => {
+    console.error(response);
     return response;
   });
 }
@@ -41,6 +43,7 @@ const clearDevices = user_id => {
     return response;
   })
   .catch((response) => {
+    console.error(response);
     return response;
   });
 }
@@ -53,6 +56,7 @@ const addNewDevice = (user_id, device_name, device_os, logged_in_at) => {
     return response;
   })
   .catch((response) => {
+    console.error(response);
     return response;
   });
 }
@@ -70,7 +74,6 @@ const addNewOrder = (
   purchased_at,
   std_dev_from_aov
   ) => {
-  console.log('ADD NEW ORDER IS RUNNING');
   return connection.queryAsync(
     `INSERT INTO user_order (
       id,
@@ -108,7 +111,7 @@ const addNewOrder = (
 }
 
 const searchOrders = id => {
-  return connection.queryAsync(`SELECT * FROM user_order WHERE id = "${id}"`)
+  return connection.queryAsync(`SELECT billing_state, shipping_state, user_id, std_dev_from_aov FROM user_order WHERE id = "${id}"`)
   .then(response => {
     return response;
   })
@@ -130,7 +133,7 @@ const getUserFromOrder = order_id => {
 }
 
 const getUnprocessedOrder = user_id => {
-  return connection.queryAsync(`SELECT * FROM user_order WHERE user_id = "${user_id}"`)
+  return connection.queryAsync(`SELECT id FROM user_order WHERE user_id = "${user_id}"`)
   .then(response => {
     return response;
   })
@@ -153,7 +156,7 @@ const getItemsFromOrder = id => {
 }
 
 const searchDevices = user_id => {
-  return connection.queryAsync(`SELECT * FROM device WHERE user_id = "${user_id}"`)
+  return connection.queryAsync(`SELECT device_name FROM device WHERE user_id = "${user_id}"`)
   .then(response => {
     return response;
   })
