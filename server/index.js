@@ -8,7 +8,6 @@ const moment = require('moment');
 // Uncomment below to test database
 // const db = require('../db/test.js');
 
-
 app.use(bodyParser.urlencoded({extended: true}));
 app.use(bodyParser.json());
 
@@ -22,7 +21,7 @@ app.use('/dataGeneration', dataGeneration);
 //=========Check if we have all order info in our database===============
 const haveAllOrderInfo = async message => {
   message = JSON.parse(message);
-  console.log('*** HERE IS WHAT THE MESSAGE LOOKS LIKE***', message);
+  console.log('***HERE IS WHAT THE MESSAGE LOOKS LIKE***', message);
   if (message.user) {//Message is from Users
     console.log('***Message is from Users***');
     //Clear devices for this user
@@ -51,21 +50,22 @@ const haveAllOrderInfo = async message => {
   } else if (message.order_id) {//Message is from Inventory
     console.log('***Message is from Inventory***');
     let haveCategories = await db.getCategoryFraudRisk(message.items[0].category_id);
-    console.log('haveCategories', haveCategories);
+    // console.log('haveCategories', haveCategories);
     //Insert into the category table if the category does not exist with a random fraud score
     if (haveCategories.length === 0) {
-      console.log('We dont have categories');
+      // console.log('We dont have categories');
       //Generate categories
-        message.items.forEach(({category_name, category_id}) => {
-          console.log('category name', category_name);
-          console.log('category id', category_id);
-           (async () => await db.addNewCategory(category_name, category_id))();
-        })
+      message.items.forEach(({category_name, category_id}) => {
+        console.log('category name', category_name);
+        console.log('category id', category_id);
+         (async () => await db.addNewCategory(category_name, category_id))();
+      })
     }
-        message.items.forEach(({category_name, category_id}) => {
-          //Update item where order id 
-           (async () => await db.updateCategoryId(category_id, message.order_id))();
-        })
+    
+    message.items.forEach(({category_name, category_id}) => {
+      //Update item where order id 
+       (async () => await db.updateCategoryId(category_id, message.order_id))();
+    })
 
     // //Check if we have devices for this user
     let user_idResult = await db.getUserFromOrder(message.order_id);
@@ -147,22 +147,18 @@ const haveAllOrderInfo = async message => {
 
 };
 
- const fraudAnalysis = async order_id => {
+const fraudAnalysis = async order_id => {
   try {
     //Algorithm parameters
     const algWeight = 25;
     const acceptableAOVStdDev = 3;
     const acceptableNumOfDevices = 6;
-
     let fraud_score = 0;
-    // let order_id = req.body.order.order_id;
-    // const items = req.body.items;
 
+    //*** INFO FROM ORDERS ***
     //Search for order by order ID
-
     let orderInfo = await db.searchOrders(order_id)
     //Grab only the first result
-    //*** INFO FROM ORDERS ***
     let { billing_name, shipping_name, billing_state, shipping_state, user_id, std_dev_from_aov } = orderInfo[0];
     fraud_score += billing_state === shipping_state ? 0 : algWeight;
     //Check if order total is unusually high
@@ -176,18 +172,13 @@ const haveAllOrderInfo = async message => {
 
     //*** INFO FROM INVENTORY ***
     //Determine if order has items from high-risk categories
-
-    //Get category id for each item in order
-    // Promise.all(items.map(({item_id}) => db.searchItems(item_id))))
-
-    //Until we receive items as part of order info...
     let itemsFromOrder = await db.getItemsFromOrder(order_id);
-    console.log("itemsFromOrder", itemsFromOrder);
+    // console.log("itemsFromOrder", itemsFromOrder);
     let categoryIds = itemsFromOrder.map(item => item.category_id);
-    console.log('categoryIds', categoryIds);
+    // console.log('categoryIds', categoryIds);
     //Get category fraud risk for each item
     let arrayOfCategoryFraudRisk = await Promise.all(categoryIds.map(category_id => db.getCategoryFraudRisk(category_id)));
-    console.log('arrayOfCategoryFraudRisk', arrayOfCategoryFraudRisk);
+    // console.log('arrayOfCategoryFraudRisk', arrayOfCategoryFraudRisk);
     //Sum category fraud risk scores
     let totalCategoriesFraudRisk = arrayOfCategoryFraudRisk.reduce((acc, cur) => acc + cur[0].fraud_risk, 0);
 
@@ -198,20 +189,19 @@ const haveAllOrderInfo = async message => {
     await db.updateFraudScore(user_id, fraud_score);
 
     //Send message to Orders with order ID and fraud score
-      let ordersParams = {
-        MessageBody: JSON.stringify({
-          order: {
-            order_id: order_id,
-            fraud_score: fraud_score
-          }
-        }),
-       QueueUrl: ordersOutbox
-      };
+    let ordersParams = {
+      MessageBody: JSON.stringify({
+        order: {
+          order_id: order_id,
+          fraud_score: fraud_score
+        }
+      }),
+     QueueUrl: ordersOutbox
+    };
 
-      sqs.sendMessage(ordersParams).promise()
-      .then(data => console.log("Successfully sent message to Orders"))
-      .catch(err => console.log(err));
-
+    sqs.sendMessage(ordersParams).promise()
+    .then(data => console.log("Successfully sent message to Orders"))
+    .catch(err => console.log(err));
 
   } catch(e) {
     await console.log(e);
@@ -234,56 +224,53 @@ const sqsInventory = new AWS.SQS({apiVersion: '2012-11-05'});
 
 //Polling for messages
 
-//Orders
-const sqsConsumerOrders = Consumer.create({
-  queueUrl: ordersInbox,
-  handleMessage: (message, done) => {
-    // console.log('***MESSAGE FROM ORDERS', message);
-    haveAllOrderInfo(message.Body);
-    done();
-  },
-  sqs: sqsOrders
-});
+  //Orders
+  const sqsConsumerOrders = Consumer.create({
+    queueUrl: ordersInbox,
+    handleMessage: (message, done) => {
+      haveAllOrderInfo(message.Body);
+      done();
+    },
+    sqs: sqsOrders
+  });
 
-//Users
-const sqsConsumerUsers = Consumer.create({
-  queueUrl: usersInbox,
-  handleMessage: (message, done) => {
-    haveAllOrderInfo(message.Body);
-    done();
-  },
-  sqs: sqsUsers
-});
+  //Users
+  const sqsConsumerUsers = Consumer.create({
+    queueUrl: usersInbox,
+    handleMessage: (message, done) => {
+      haveAllOrderInfo(message.Body);
+      done();
+    },
+    sqs: sqsUsers
+  });
 
-//Inventory
-const sqsConsumerInventory = Consumer.create({
-  queueUrl: inventoryInbox,
-  handleMessage: (message, done) => {
-    haveAllOrderInfo(message.Body);
-    done();
-  },
-  sqs: sqsInventory
-});
- 
-sqsConsumerOrders.on('error', (err) => {
-  console.log(err.message);
-});
- 
-sqsConsumerOrders.start();
+  //Inventory
+  const sqsConsumerInventory = Consumer.create({
+    queueUrl: inventoryInbox,
+    handleMessage: (message, done) => {
+      haveAllOrderInfo(message.Body);
+      done();
+    },
+    sqs: sqsInventory
+  });
+   
+  sqsConsumerOrders.on('error', (err) => {
+    console.log(err.message);
+  });
+   
+  sqsConsumerOrders.start();
 
-sqsConsumerUsers.on('error', (err) => {
-  console.log(err.message);
-});
- 
-sqsConsumerUsers.start();
+  sqsConsumerUsers.on('error', (err) => {
+    console.log(err.message);
+  });
+   
+  sqsConsumerUsers.start();
 
-sqsConsumerInventory.on('error', (err) => {
-  console.log(err.message);
-});
- 
-sqsConsumerInventory.start();
-
-
+  sqsConsumerInventory.on('error', (err) => {
+    console.log(err.message);
+  });
+   
+  sqsConsumerInventory.start();
 // ===========================================
 
 app.listen(3000, function() {
