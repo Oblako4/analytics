@@ -49,11 +49,11 @@ const haveAllOrderInfo = async message => {
 
   } else if (message.order_id) {//Message is from Inventory
     console.log('***Message is from Inventory***');
-    let haveCategories = await db.getCategoryFraudRisk(message.items[0].category_id);
+    //Check if all categories are generated
+    let haveCategories = await Promise.all(message.items.map(item => db.getCategoryFraudRisk(item.category_id)));
     // console.log('haveCategories', haveCategories);
-    //Insert into the category table if the category does not exist with a random fraud score
+    //If the category does not exist
     if (haveCategories.length === 0) {
-      // console.log('We dont have categories');
       //Generate categories
       message.items.forEach(({category_name, category_id}) => {
         console.log('category name', category_name);
@@ -61,7 +61,7 @@ const haveAllOrderInfo = async message => {
          (async () => await db.addNewCategory(category_name, category_id))();
       })
     }
-    
+
     message.items.forEach(({category_name, category_id}) => {
       //Update item where order id 
        (async () => await db.updateCategoryId(category_id, message.order_id))();
