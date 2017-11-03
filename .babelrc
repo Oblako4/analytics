@@ -1,4 +1,3 @@
 {
-  "presets": ["latest"],
-  "plugins": ["fast-async"]
+  "presets": ["latest"]
 }

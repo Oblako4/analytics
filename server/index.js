@@ -4,8 +4,8 @@ const app = express();
 const db = require('../db/index.js');
 const { usersInbox, usersOutbox, ordersInbox, ordersOutbox, inventoryInbox, inventoryOutbox } = require ('../config.js');
 const moment = require('moment');
-require('nodent')();
-'use nodent';
+// require('nodent')();
+// 'use nodent';
 
 // Uncomment below to test database
 // const db = require('../db/test.js');
@@ -17,8 +17,8 @@ app.use(bodyParser.json());
 app.use(express.static(__dirname + '/../client'));
 
 // Routing for data generation
-var dataGeneration = require('./routes/data-generation');
-app.use('/dataGeneration', dataGeneration);
+// const dataGeneration = require('./routes/data-generation');
+// app.use('/dataGeneration', dataGeneration);
 
 //=========Check if we have all order info in our database===============
 const haveAllOrderInfo = async message => {
@@ -72,9 +72,9 @@ const haveAllOrderInfo = async message => {
 
       // //Check if we have devices for this user
       let user_idResult = await db.getUserFromOrder(message.order_id);
-      console.log('user id result', user_idResult);
+      // console.log('user id result', user_idResult);
       let user_id = user_idResult[0].user_id;
-      console.log('user id', user_id);
+      // console.log('user id', user_id);
       let haveDevices = await db.searchDevices(user_id);
       if (haveDevices.length > 0) {
         //Search for user's order with no fraud score
@@ -156,7 +156,7 @@ const fraudAnalysis = async order_id => {
   try {
     //Algorithm parameters
     const algWeight = 25;
-    const acceptableAOVStdDev = 3;
+    const acceptableAOVStdDev = 2;
     const acceptableNumOfDevices = 6;
     let fraud_score = 0;
 

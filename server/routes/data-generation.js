@@ -5,7 +5,7 @@ const faker = require('faker');
 const _ = require('lodash');
 const moment = require('moment');
 // Uncomment below to test database
-// const db = require('../db/test.js');
+const db = require('../../db/test.js');
 
 const categories = [
   'Amazon Device Accessories',
