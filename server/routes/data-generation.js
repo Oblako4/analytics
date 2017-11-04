@@ -1,11 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const faker = require('faker');
-const db = require('../../db/index.js');
+// const db = require('../db/index.js');
 const _ = require('lodash');
 const moment = require('moment');
 // Uncomment below to test database
-// const db = require('../db/test.js');
+const db = require('../../db/test.js');
 
 const categories = [
   'Amazon Device Accessories',
