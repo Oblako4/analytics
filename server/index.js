@@ -5,6 +5,7 @@ const db = require('../db/index.js');
 const moment = require('moment');
 const { inbox, usersOutbox, ordersOutbox, inventoryOutbox } = require ('../config.js');
 const _ = require('lodash');
+const Promise = require('bluebird');
 
 // Uncomment below to test database
 // const db = require('../db/test.js');
@@ -21,11 +22,11 @@ app.use('/dataGeneration', dataGeneration);
 
 
 let redisLite = {
-  // 123456: {haveDevices: false, haveCategories: false},
+  //If it isn't here, query db
 }; 
 
 //=========Check if we have all order info in our database===============
-const haveAllOrderInfo = async message => {
+const haveAllOrderInfo = async (message, ReceiptHandle) => {
   try {
     message = JSON.parse(message);
     console.log('***HERE IS WHAT THE MESSAGE LOOKS LIKE***', message);
@@ -53,6 +54,7 @@ const haveAllOrderInfo = async message => {
         fraudAnalysis(order_id);
       } else {
         console.log('We do not have info from Inventory yet');
+        sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle});
       }
 
     } else if (message.order_id) {//Message is from Inventory
@@ -75,6 +77,7 @@ const haveAllOrderInfo = async message => {
           fraudAnalysis(message.order_id);
       } else {
         console.log('Need info from User Activity');
+        sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle});
       }
 
     } else if (message.chargedback_at || message.order) {//Message is from Orders
@@ -83,6 +86,7 @@ const haveAllOrderInfo = async message => {
         console.log('***Chargeback received***');
         //Update order table
         await db.updateCB(message.order_id, moment(message.chargedback_at).format("YYYY-MM-DD HH:mm:ss"));
+        sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle});
       } else {//Fraud analysis
         // console.log('***Analyzing for fraud***');
         //Save order to database
@@ -101,7 +105,7 @@ const haveAllOrderInfo = async message => {
         );
         //Save items to database
         await Promise.all(message.items.map(item => db.addNewItemFromOrder(item.item_id, message.order.order_id)))
-        
+
         //Send message to Users
         let usersParams = {
           MessageBody: JSON.stringify({
@@ -112,8 +116,8 @@ const haveAllOrderInfo = async message => {
         };
 
         sqs.sendMessage(usersParams).promise()
-        .then(data => console.log("Successfully sent message to User Activity"))
-        .catch(err => console.log(err));
+        .then(data => console.log("Successfully sent message to User Activity")})
+        .catch(err => console.error(err));
 
         //Send message to Inventory
         let invParams = {
@@ -125,11 +129,14 @@ const haveAllOrderInfo = async message => {
         };
 
         sqs.sendMessage(invParams).promise()
-        .then(data => console.log("Successfully sent message to Inventory"))
-        .catch(err => console.log(err));
+        .then(data => {
+          console.log("Successfully sent message to Inventory");
+          sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle});
+        })
+        .catch(err => console.error(err));
       }
     } else {
-      console.log('Message looks weird!')
+      console.log('Message looks weird!');
     }
   } catch(e) {
     await console.error(e);
@@ -177,7 +184,6 @@ const fraudAnalysis = async order_id => {
     console.log('***FRAUD SCORE***' ,fraud_score);
     //Update fraud score for order in database
     await db.updateFraudScore(user_id, fraud_score);
-
     //Send message to Orders with order ID and fraud score
     let ordersParams = {
       MessageBody: JSON.stringify({
@@ -190,7 +196,10 @@ const fraudAnalysis = async order_id => {
     };
 
     sqs.sendMessage(ordersParams).promise()
-    .then(data => console.log("Successfully sent message to Orders"))
+    .then(data => {
+      console.log("Successfully sent message to Orders");
+      sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle});
+    })
     .catch(err => console.log(err));
 
   } catch(e) {
@@ -200,33 +209,27 @@ const fraudAnalysis = async order_id => {
   
 // ================== AWS ====================
 // Load the AWS SDK for Node.js
-const Consumer = require('sqs-consumer');
 const AWS = require('aws-sdk');
 
 // Load credentials and set the region from the JSON file
 AWS.config.loadFromPath('./config.json');
+AWS.config.setPromisesDependency(Promise);
 
 // SQS service objects
 const sqs = new AWS.SQS({apiVersion: '2012-11-05'}); //For sending
 const sqsInbox = new AWS.SQS({apiVersion: '2012-11-05'});
 
-//Polling for messages
+const params = {
+  QueueUrl: inbox
+};
 
-  //Inbox
-  const sqsConsumer = Consumer.create({
-    queueUrl: inbox,
-    handleMessage: (message, done) => {
-      haveAllOrderInfo(message.Body);
-      done();
-    },
-    sqs: sqsInbox
-  });
-   
-  sqsConsumer.on('error', (err) => {
-    console.log(err.message);
-  });
-   
-  sqsConsumer.start();
+let pollQueue = x => { 
+  sqs.receiveMessage(params).promise()
+  .then(message => haveAllOrderInfo(message.Body, message.Messages[0]))
+  .catch(error => console.error(error));
+};
+
+setInterval(pollQueue, 10);
 
 // ===========================================
 
