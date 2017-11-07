@@ -6,6 +6,7 @@ config/test.json
 mysql-connector-java-5.1.44
 config.js
 config.json
+sftp-config.json
 
 # OS X
 .DS_Store
