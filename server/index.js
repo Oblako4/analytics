@@ -51,12 +51,12 @@ const haveAllOrderInfo = async (message, ReceiptHandle) => {
       if (redisLite[order_id].haveDevices && redisLite[order_id].haveCategories) {
         //Send unprocessed order through to analysis
         delete redisLite[order_id];
-        sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle: ReceiptHandle}).promise()
+        sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle}).promise()
         .then(x => fraudAnalysis(order_id))
         .catch(err => console.error(err));
       } else {
         console.log('We do not have info from Inventory yet');
-        sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle: ReceiptHandle}).promise()
+        sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle}).promise()
         .catch(err => console.error(err));
       }
 
@@ -77,12 +77,12 @@ const haveAllOrderInfo = async (message, ReceiptHandle) => {
       if (redisLite[message.order_id].haveDevices && redisLite[message.order_id].haveCategories) {
           //Send unprocessed order through to analysis
           delete redisLite[message.order_id];
-          sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle: ReceiptHandle}).promise()
+          sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle}).promise()
           .then(x => fraudAnalysis(message.order_id))
           .catch(err => console.error(err));
       } else {
         console.log('Need info from User Activity');
-        sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle: ReceiptHandle}).promise()
+        sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle}).promise()
         .catch(err => console.error(err));
       }
 
@@ -92,7 +92,7 @@ const haveAllOrderInfo = async (message, ReceiptHandle) => {
         console.log('***Chargeback received***');
         //Update order table
         await db.updateCB(message.order_id, moment(message.chargedback_at).format("YYYY-MM-DD HH:mm:ss"));
-        sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle: ReceiptHandle}).promise()
+        sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle}).promise()
         .catch(err => console.error(err));
       } else {//Fraud analysis
         // console.log('***Analyzing for fraud***');
@@ -112,7 +112,7 @@ const haveAllOrderInfo = async (message, ReceiptHandle) => {
         );
         //Save items to database
         await Promise.all(message.items.map(item => db.addNewItemFromOrder(item.item_id, message.order.order_id)))
-        sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle: ReceiptHandle}).promise()
+        sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle}).promise()
         .catch(err => console.error(err));
         //Send message to Users
         let usersParams = {
@@ -142,7 +142,7 @@ const haveAllOrderInfo = async (message, ReceiptHandle) => {
       }
     } else {
       console.log('Message looks weird!');
-      sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle: ReceiptHandle}).promise()
+      sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle}).promise()
       .catch(err => console.error(err));
     }
   } catch(e) {
@@ -154,8 +154,9 @@ const fraudAnalysis = async order_id => {
   try {
     //Algorithm parameters
     const algWeight = 25;
-    const acceptableAOVStdDev = 7;
-    const acceptableNumOfDevices = 6;
+    const acceptableAOVStdDev = 2;
+    const acceptableNumOfDevices = 5;
+    const acceptableCategoryFraudRisk = 75;
     let fraud_score = 0;
 
     //*** INFO FROM ORDERS ***
@@ -165,29 +166,28 @@ const fraudAnalysis = async order_id => {
     let { billing_state, shipping_state, user_id, std_dev_from_aov } = orderInfo[0];
     fraud_score += billing_state === shipping_state ? 0 : algWeight;
     //Check if order total is unusually high
-    fraud_score += std_dev_from_aov < acceptableAOVStdDev ? 0 : algWeight;
+    fraud_score += std_dev_from_aov < acceptableAOVStdDev ? algWeight * (std_dev_from_aov - 1) : algWeight;
 
     //*** INFO FROM USER ***
     //Search for a user's devices
     let deviceResult = await db.searchDevices(user_id);
     let uniqueDevices = _.uniq(deviceResult);
     // determine if # of devices is high
-    fraud_score += uniqueDevices.length < acceptableNumOfDevices ? 0 : algWeight;
+    fraud_score += uniqueDevices.length < acceptableNumOfDevices ? algWeight * (uniqueDevices.length / acceptableNumOfDevices) : algWeight;
 
-    //*** INFO FROM INVENTORY ***
+    //***INFO FROM INVENTORY***
     //Determine if order has items from high-risk categories
     let itemsFromOrder = await db.getItemsFromOrder(order_id);
-    // console.log("itemsFromOrder", itemsFromOrder);
     let categoryIds = itemsFromOrder.map(item => item.category_id);
-    // console.log('categoryIds', categoryIds);
+
     //Get category fraud risk for each item
     let arrayOfCategoryFraudRisk = await Promise.all(categoryIds.map(category_id => db.getCategoryFraudRisk(category_id)));
     // console.log('arrayOfCategoryFraudRisk', arrayOfCategoryFraudRisk);
     //Sum category fraud risk scores
     let totalCategoriesFraudRisk = arrayOfCategoryFraudRisk.reduce((acc, cur) => acc + cur[0].fraud_risk, 0);
 
-    //Increment fraud score if category risk is over 30
-    fraud_score += totalCategoriesFraudRisk < 80 ? 0 : algWeight; 
+    //Increment fraud score if category risk is over acceptable category fraud risk
+    fraud_score += totalCategoriesFraudRisk < acceptableCategoryFraudRisk ? algWeight * (totalCategoriesFraudRisk / acceptableCategoryFraudRisk) : algWeight; 
     console.log('***FRAUD SCORE***' ,fraud_score);
     //Update fraud score for order in database
     await db.updateFraudScore(user_id, fraud_score);
