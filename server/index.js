@@ -6,6 +6,19 @@ const moment = require('moment');
 const { inbox, usersOutbox, ordersOutbox, inventoryOutbox } = require ('../config.js');
 const _ = require('lodash');
 const Promise = require('bluebird');
+const RedisServer = require('redis-server');
+
+//===========Redis===============
+const redis = require('redis');
+Promise.promisifyAll(redis.RedisClient.prototype);
+Promise.promisifyAll(redis.Multi.prototype);
+ 
+// Simply pass the port that you want a Redis server to listen on.
+const server = new RedisServer(6379);
+
+const client = redis.createClient();
+ 
+//===============================
 
 // Uncomment below to test database
 // const db = require('../db/test.js');
@@ -18,12 +31,7 @@ app.use(express.static(__dirname + '/../client'));
 
 // Routing for data generation
 const dataGeneration = require('./routes/data-generation');
-app.use('/dataGeneration', dataGeneration);
-
-
-let redisLite = {
-  //If it isn't here, query db
-}; 
+app.use('/dataGeneration', dataGeneration); 
 
 //=========Check if we have all order info in our database===============
 const haveAllOrderInfo = async (message, ReceiptHandle) => {
@@ -39,18 +47,21 @@ const haveAllOrderInfo = async (message, ReceiptHandle) => {
         message.user.devices.map(({device_name, device_os, logged_in_at}) => db.addNewDevice(message.user.id, device_name, device_os, moment(logged_in_at).format("YYYY-MM-DD HH:mm:ss")))
       );
 
+      //Get order id from user id
       let order_id_result = await db.getUnprocessedOrder(message.user.id);
       let order_id = order_id_result[0].id;
 
       //Set have devices in unprocessed order cache to true
-      redisLite[order_id] = redisLite[order_id] || {};
-      redisLite[order_id].haveDevices = true;
+      client.setAsync(`${order_id}:devices`, 'true');
 
-      // if (haveItems.length > 0) {
-        //Search for user's order with no fraud score
-      if (redisLite[order_id].haveDevices && redisLite[order_id].haveCategories) {
+      //Search for user's order with no fraud score
+      let haveCategories = await client.existsAsync(`${order_id}:categories`);
+      let haveDevices = await client.existsAsync(`${order_id}:devices`);
+      if (haveCategories && haveDevices) {
+        await client.delAsync(`${order_id}:categories`);
+        await client.delAsync(`${order_id}:devices`);
+
         //Send unprocessed order through to analysis
-        delete redisLite[order_id];
         sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle}).promise()
         .then(x => fraudAnalysis(order_id))
         .catch(err => console.error(err));
@@ -71,15 +82,17 @@ const haveAllOrderInfo = async (message, ReceiptHandle) => {
       })
 
       //Set have categories in unprocessed order cache to true
-      redisLite[message.order_id] = redisLite[message.order_id] || {};
-      redisLite[message.order_id].haveCategories = true;
+      client.setAsync(`${message.order_id}:categories`, 'true');
+      let haveCategories = await client.existsAsync(`${message.order_id}:categories`);
+      let haveDevices = await client.existsAsync(`${message.order_id}:devices`);
+      if (haveCategories && haveDevices) {
+        //Send unprocessed order through to analysis
+        await client.delAsync(`${message.order_id}:categories`);
+        await client.delAsync(`${message.order_id}:devices`);
 
-      if (redisLite[message.order_id].haveDevices && redisLite[message.order_id].haveCategories) {
-          //Send unprocessed order through to analysis
-          delete redisLite[message.order_id];
-          sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle}).promise()
-          .then(x => fraudAnalysis(message.order_id))
-          .catch(err => console.error(err));
+        sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle}).promise()
+        .then(x => fraudAnalysis(message.order_id))
+        .catch(err => console.error(err));
       } else {
         console.log('Need info from User Activity');
         sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle}).promise()
@@ -87,58 +100,58 @@ const haveAllOrderInfo = async (message, ReceiptHandle) => {
       }
 
     } else if (message.chargedback_at || message.order) {//Message is from Orders
-      console.log('***Message is from Orders***');
-      if (message.chargedback_at) {//Update chargeback date
-        console.log('***Chargeback received***');
-        //Update order table
-        await db.updateCB(message.order_id, moment(message.chargedback_at).format("YYYY-MM-DD HH:mm:ss"));
-        sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle}).promise()
-        .catch(err => console.error(err));
-      } else {//Fraud analysis
-        // console.log('***Analyzing for fraud***');
-        //Save order to database
-        await db.addNewOrder(
-          message.order.order_id,
-          message.order.user_id, 
-          message.order.billing_state, 
-          message.order.billing_ZIP,
-          message.order.billing_country,
-          message.order.shipping_state, 
-          message.order.shipping_ZIP,
-          message.order.shipping_country,
-          message.order.total_price,
-          moment(message.order.purchased_at).format("YYYY-MM-DD HH:mm:ss"),
-          message.order.std_dev_from_aov
-        );
-        //Save items to database
-        await Promise.all(message.items.map(item => db.addNewItemFromOrder(item.item_id, message.order.order_id)))
-        sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle}).promise()
-        .catch(err => console.error(err));
-        //Send message to Users
-        let usersParams = {
-          MessageBody: JSON.stringify({
-            user_id: message.order.user_id,
-            days: 30
-          }),
-         QueueUrl: usersOutbox
-        };
+        console.log('***Message is from Orders***');
+        if (message.chargedback_at) {//Update chargeback date
+          console.log('***Chargeback received***');
+          //Update order table
+          await db.updateCB(message.order_id, moment(message.chargedback_at).format("YYYY-MM-DD HH:mm:ss"));
+          sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle}).promise()
+          .catch(err => console.error(err));
+    } else {//Fraud analysis
+      // console.log('***Analyzing for fraud***');
+      //Save order to database
+      await db.addNewOrder(
+        message.order.order_id,
+        message.order.user_id, 
+        message.order.billing_state, 
+        message.order.billing_ZIP,
+        message.order.billing_country,
+        message.order.shipping_state, 
+        message.order.shipping_ZIP,
+        message.order.shipping_country,
+        message.order.total_price,
+        moment(message.order.purchased_at).format("YYYY-MM-DD HH:mm:ss"),
+        message.order.std_dev_from_aov
+      );
+      //Save items to database
+      await Promise.all(message.items.map(item => db.addNewItemFromOrder(item.item_id, message.order.order_id)))
+      sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle}).promise()
+      .catch(err => console.error(err));
+      //Send message to Users
+      let usersParams = {
+        MessageBody: JSON.stringify({
+          user_id: message.order.user_id,
+          days: 30
+        }),
+       QueueUrl: usersOutbox
+      };
 
-        sqs.sendMessage(usersParams).promise()
-        .then(data => console.log("Successfully sent message to User Activity"))
-        .catch(err => console.error(err));
+      sqs.sendMessage(usersParams).promise()
+      .then(data => console.log("Successfully sent message to User Activity"))
+      .catch(err => console.error(err));
 
-        //Send message to Inventory
-        let invParams = {
-          MessageBody: JSON.stringify({
-            order_id: message.order.order_id,
-            items: message.items.map(({item_id}) => item_id)
-          }),
-         QueueUrl: inventoryOutbox
-        };
+      //Send message to Inventory
+      let invParams = {
+        MessageBody: JSON.stringify({
+          order_id: message.order.order_id,
+          items: message.items.map(({item_id}) => item_id)
+        }),
+       QueueUrl: inventoryOutbox
+      };
 
-        sqs.sendMessage(invParams).promise()
-        .then(data => console.log("Successfully sent message to Inventory"))
-        .catch(err => console.error(err));
+      sqs.sendMessage(invParams).promise()
+      .then(data => console.log("Successfully sent message to Inventory"))
+      .catch(err => console.error(err));
       }
     } else {
       console.log('Message looks weird!');
@@ -166,7 +179,9 @@ const fraudAnalysis = async order_id => {
     let { billing_state, shipping_state, user_id, std_dev_from_aov } = orderInfo[0];
     fraud_score += billing_state === shipping_state ? 0 : algWeight;
     //Check if order total is unusually high
-    fraud_score += std_dev_from_aov < acceptableAOVStdDev ? algWeight * (std_dev_from_aov - 1) : algWeight;
+    if (std_dev_from_aov > 1) {
+      fraud_score += std_dev_from_aov < acceptableAOVStdDev ? algWeight * (std_dev_from_aov - 1) : algWeight;
+    }
 
     //*** INFO FROM USER ***
     //Search for a user's devices
