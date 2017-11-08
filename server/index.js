@@ -13,11 +13,8 @@ const redis = require('redis');
 Promise.promisifyAll(redis.RedisClient.prototype);
 Promise.promisifyAll(redis.Multi.prototype);
  
-// Simply pass the port that you want a Redis server to listen on.
 const server = new RedisServer(6379);
-
 const client = redis.createClient();
- 
 //===============================
 
 // Uncomment below to test database
@@ -37,11 +34,11 @@ app.use('/dataGeneration', dataGeneration);
 const haveAllOrderInfo = async (message, ReceiptHandle) => {
   message = JSON.parse(message);
   try {
-    console.log('***HERE IS WHAT THE MESSAGE LOOKS LIKE***', message);
+    // console.log('***HERE IS WHAT THE MESSAGE LOOKS LIKE***', message);
     if (message.user) {//Message is from User Activity
-      console.log('***Message is from User Activity***');
+      console.log('Message is from User Activity');
       //Clear devices for this user
-      await db.clearDevices(message.user.id);
+      db.clearDevices(message.user.id);
       //Save devices for this user
       await Promise.all(
         message.user.devices.map(({device_name, device_os, logged_in_at}) => db.addNewDevice(message.user.id, device_name, device_os, moment(logged_in_at).format("YYYY-MM-DD HH:mm:ss")))
@@ -58,21 +55,22 @@ const haveAllOrderInfo = async (message, ReceiptHandle) => {
       let haveCategories = await client.existsAsync(`${order_id}:categories`);
       let haveDevices = await client.existsAsync(`${order_id}:devices`);
       if (haveCategories && haveDevices) {
-        await client.delAsync(`${order_id}:categories`);
-        await client.delAsync(`${order_id}:devices`);
+        client.delAsync(`${order_id}:categories`);
+        client.delAsync(`${order_id}:devices`);
 
         //Send unprocessed order through to analysis
-        sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle}).promise()
+        sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle: ReceiptHandle}).promise()
         .then(x => fraudAnalysis(order_id))
         .catch(err => console.error(err));
+
       } else {
         console.log('We do not have info from Inventory yet');
-        sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle}).promise()
-        .catch(err => console.error(err));
+        sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle: ReceiptHandle}).promise();
+        
       }
 
     } else if (message.order_id) {//Message is from Inventory
-      console.log('***Message is from Inventory***');
+      console.log('Message is from Inventory');
 
       //Generate categories
       await Promise.all(message.items.map(({category_name, category_id}) => db.addNewCategory(category_name, category_id)))
@@ -87,30 +85,30 @@ const haveAllOrderInfo = async (message, ReceiptHandle) => {
       let haveDevices = await client.existsAsync(`${message.order_id}:devices`);
       if (haveCategories && haveDevices) {
         //Send unprocessed order through to analysis
-        await client.delAsync(`${message.order_id}:categories`);
-        await client.delAsync(`${message.order_id}:devices`);
-
-        sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle}).promise()
+        client.delAsync(`${message.order_id}:categories`);
+        client.delAsync(`${message.order_id}:devices`);
+        sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle: ReceiptHandle}).promise()
         .then(x => fraudAnalysis(message.order_id))
         .catch(err => console.error(err));
+
       } else {
         console.log('Need info from User Activity');
-        sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle}).promise()
-        .catch(err => console.error(err));
+        sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle: ReceiptHandle}).promise();
+        
       }
 
     } else if (message.chargedback_at || message.order) {//Message is from Orders
-        console.log('***Message is from Orders***');
+        console.log('Message is from Orders');
         if (message.chargedback_at) {//Update chargeback date
-          console.log('***Chargeback received***');
+          console.log('Chargeback received');
           //Update order table
-          await db.updateCB(message.order_id, moment(message.chargedback_at).format("YYYY-MM-DD HH:mm:ss"));
-          sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle}).promise()
-          .catch(err => console.error(err));
+          db.updateCB(message.order_id, moment(message.chargedback_at).format("YYYY-MM-DD HH:mm:ss"));
+          sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle: ReceiptHandle}).promise();
+        
     } else {//Fraud analysis
       // console.log('***Analyzing for fraud***');
       //Save order to database
-      await db.addNewOrder(
+      db.addNewOrder(
         message.order.order_id,
         message.order.user_id, 
         message.order.billing_state, 
@@ -124,9 +122,9 @@ const haveAllOrderInfo = async (message, ReceiptHandle) => {
         message.order.std_dev_from_aov
       );
       //Save items to database
-      await Promise.all(message.items.map(item => db.addNewItemFromOrder(item.item_id, message.order.order_id)))
-      sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle}).promise()
-      .catch(err => console.error(err));
+      await Promise.all(message.items.map(item => db.addNewItemFromOrder(item.item_id, message.order.order_id)));
+      sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle: ReceiptHandle}).promise();
+
       //Send message to Users
       let usersParams = {
         MessageBody: JSON.stringify({
@@ -136,9 +134,7 @@ const haveAllOrderInfo = async (message, ReceiptHandle) => {
        QueueUrl: usersOutbox
       };
 
-      sqs.sendMessage(usersParams).promise()
-      .then(data => console.log("Successfully sent message to User Activity"))
-      .catch(err => console.error(err));
+      sqs.sendMessage(usersParams).promise();
 
       //Send message to Inventory
       let invParams = {
@@ -149,14 +145,11 @@ const haveAllOrderInfo = async (message, ReceiptHandle) => {
        QueueUrl: inventoryOutbox
       };
 
-      sqs.sendMessage(invParams).promise()
-      .then(data => console.log("Successfully sent message to Inventory"))
-      .catch(err => console.error(err));
+      sqs.sendMessage(invParams).promise();
       }
     } else {
-      console.log('Message looks weird!');
-      sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle}).promise()
-      .catch(err => console.error(err));
+      // console.log('Message looks weird!');
+      sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle: ReceiptHandle}).promise();
     }
   } catch(e) {
     await console.error(e);
@@ -203,7 +196,7 @@ const fraudAnalysis = async order_id => {
 
     //Increment fraud score if category risk is over acceptable category fraud risk
     fraud_score += totalCategoriesFraudRisk < acceptableCategoryFraudRisk ? algWeight * (totalCategoriesFraudRisk / acceptableCategoryFraudRisk) : algWeight; 
-    console.log('***FRAUD SCORE***' ,fraud_score);
+    console.log('FRAUD SCORE:' ,fraud_score);
     //Update fraud score for order in database
     await db.updateFraudScore(user_id, fraud_score);
     //Send message to Orders with order ID and fraud score
@@ -217,9 +210,7 @@ const fraudAnalysis = async order_id => {
      QueueUrl: ordersOutbox
     };
 
-    sqs.sendMessage(ordersParams).promise()
-    .then(data => console.log("Successfully sent message to Orders"))
-    .catch(err => console.log(err));
+    await sqs.sendMessage(ordersParams).promise();
 
   } catch(e) {
     await console.error(e);
@@ -235,8 +226,7 @@ AWS.config.loadFromPath('./config.json');
 AWS.config.setPromisesDependency(Promise);
 
 // SQS service objects
-const sqs = new AWS.SQS({apiVersion: '2012-11-05'}); //For sending
-const sqsInbox = new AWS.SQS({apiVersion: '2012-11-05'});
+const sqs = new AWS.SQS({apiVersion: '2012-11-05'});
 
 const params = {
   QueueUrl: inbox
@@ -245,7 +235,6 @@ const params = {
 let pollQueue = x => { 
   sqs.receiveMessage(params).promise()
   .then(data => {
-    // console.log('***DATA!!!', data);
     if (data.Messages) {
       haveAllOrderInfo(data.Messages[0].Body, data.Messages[0].ReceiptHandle);
     }
@@ -253,7 +242,7 @@ let pollQueue = x => {
   .catch(error => console.error(error));
 };
 
-setInterval(pollQueue, 500);
+setInterval(pollQueue, 100);
 
 // ===========================================
 
