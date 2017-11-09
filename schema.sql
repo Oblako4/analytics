@@ -5,46 +5,44 @@ CREATE DATABASE analytics;
 USE analytics;
 
 CREATE TABLE user_order (
-  primaryId INT AUTO_INCREMENT,
   id INT,
-  user_id INT,
-  billing_state VARCHAR(50),
-  billing_ZIP VARCHAR(20),
-  billing_country VARCHAR(50),
-  shipping_state VARCHAR(50),
-  shipping_ZIP VARCHAR(20),
-  shipping_country VARCHAR(50),
-  total_price DECIMAL(7, 2),
+  user_id INT NOT NULL,
+  billing_state VARCHAR(50) NOT NULL,
+  billing_ZIP VARCHAR(20) NOT NULL,
+  billing_country VARCHAR(50) NOT NULL,
+  shipping_state VARCHAR(50) NOT NULL,
+  shipping_ZIP VARCHAR(20) NOT NULL,
+  shipping_country VARCHAR(50) NOT NULL,
+  total_price DECIMAL(7, 2) NOT NULL,
   fraud_score INT,
-  purchased_at DATETIME,
+  purchased_at DATETIME NOT NULL,
   chargedback_at DATETIME,
-  std_dev_from_aov DECIMAL(7, 5),
-  PRIMARY KEY (primaryId)
+  std_dev_from_aov DECIMAL(7, 5) NOT NULL,
+  PRIMARY KEY (id),
+  INDEX (fraud_score)
 );
 
 CREATE TABLE category (
-  primaryId INT AUTO_INCREMENT,
   id INT,
-  name VARCHAR(200),
-  fraud_risk INT,
-  PRIMARY KEY (primaryId)
+  name VARCHAR(200) NOT NULL,
+  fraud_risk INT NOT NULL,
+  PRIMARY KEY (id)
 );
 
 CREATE TABLE item (
-  primaryId INT AUTO_INCREMENT,  
-  id INT NOT NULL,
+  id INT,
   category_id INT,
-  order_id INT,
-  PRIMARY KEY (primaryId)
+  order_id INT NOT NULL,
+  INDEX (category_id),
+  INDEX (order_id)
 );
 
 CREATE TABLE device (
-  id INT AUTO_INCREMENT,
-  user_id INT,
-  device_name VARCHAR(100),
-  device_os VARCHAR(100),
-  logged_in_at DATETIME,
-  PRIMARY KEY (id)
+  user_id INT NOT NULL,
+  device_name VARCHAR(100) NOT NULL,
+  device_os VARCHAR(100) NOT NULL,
+  logged_in_at DATETIME NOT NULL,
+  INDEX (user_id)
 );
 
 

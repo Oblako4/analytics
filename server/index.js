@@ -2,10 +2,20 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const app = express();
 const db = require('../db/index.js');
-const { usersInbox, usersOutbox, ordersInbox, ordersOutbox, inventoryInbox, inventoryOutbox } = require ('../config.js');
 const moment = require('moment');
-// require('nodent')();
-// 'use nodent';
+const { inbox, usersOutbox, ordersOutbox, inventoryOutbox } = require ('../config.js');
+const _ = require('lodash');
+const Promise = require('bluebird');
+
+//===========Redis===============
+const RedisServer = require('redis-server');
+const redis = require('redis');
+Promise.promisifyAll(redis.RedisClient.prototype);
+Promise.promisifyAll(redis.Multi.prototype);
+ 
+const server = new RedisServer(6379);
+const client = redis.createClient();
+//===============================
 
 // Uncomment below to test database
 // const db = require('../db/test.js');
@@ -17,135 +27,129 @@ app.use(bodyParser.json());
 app.use(express.static(__dirname + '/../client'));
 
 // Routing for data generation
-// const dataGeneration = require('./routes/data-generation');
-// app.use('/dataGeneration', dataGeneration);
+const dataGeneration = require('./routes/data-generation');
+app.use('/dataGeneration', dataGeneration); 
 
 //=========Check if we have all order info in our database===============
-const haveAllOrderInfo = async message => {
+const haveAllOrderInfo = async (message, ReceiptHandle) => {
+  message = JSON.parse(message);
   try {
-    message = JSON.parse(message);
-    console.log('***HERE IS WHAT THE MESSAGE LOOKS LIKE***', message);
+    // console.log('***HERE IS WHAT THE MESSAGE LOOKS LIKE***', message);
     if (message.user) {//Message is from User Activity
-      console.log('***Message is from User Activity***');
+      console.log('Message is from User Activity');
       //Clear devices for this user
-      await db.clearDevices(message.user.id);
+      db.clearDevices(message.user.id);
       //Save devices for this user
       await Promise.all(
         message.user.devices.map(({device_name, device_os, logged_in_at}) => db.addNewDevice(message.user.id, device_name, device_os, moment(logged_in_at).format("YYYY-MM-DD HH:mm:ss")))
       );
 
-      //Check if we have the category
-      let haveItems = await db.searchUserItems(message.user.id);
-      if (haveItems.length > 0) {
-        //Search for user's order with no fraud score
-        let unprocessedOrders = await db.getUnprocessedOrder(message.user.id);
-        let unprocessedOrder = unprocessedOrders[0];
-        //Check if we have categories from this user's order
-        let haveCategories = await db.getItemsFromOrder(unprocessedOrder.id);
-        if (haveCategories.length > 0) {
-          //Send unprocessed order through to analysis
-          fraudAnalysis(unprocessedOrder.id);
-        }
+      //Get order id from user id
+      let order_id_result = await db.getUnprocessedOrder(message.user.id);
+      let order_id = order_id_result[0].id;
+
+      //Set have devices in unprocessed order cache to true
+      client.setAsync(`${order_id}:devices`, 'true');
+
+      //Search for user's order with no fraud score
+      let haveCategories = await client.existsAsync(`${order_id}:categories`);
+      let haveDevices = await client.existsAsync(`${order_id}:devices`);
+      if (haveCategories && haveDevices) {
+        client.delAsync(`${order_id}:categories`);
+        client.delAsync(`${order_id}:devices`);
+
+        //Send unprocessed order through to analysis
+        sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle: ReceiptHandle}).promise()
+        .then(x => fraudAnalysis(order_id))
+        .catch(err => console.error(err));
+
       } else {
-        console.log('We do not have info from Inventory yet');
+        // console.log('We do not have info from Inventory yet');
+        sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle: ReceiptHandle}).promise();
+        
       }
 
     } else if (message.order_id) {//Message is from Inventory
-      console.log('***Message is from Inventory***');
-      //Check if all categories are generated
-      let haveCategories = await Promise.all(message.items.map(item => db.getCategoryFraudRisk(item.category_id)));
-      // console.log('haveCategories', haveCategories);
-      //If the category does not exist
-      if (haveCategories.length === 0) {
-        //Generate categories
-        message.items.forEach(({category_name, category_id}) => {
-          console.log('category name', category_name);
-          console.log('category id', category_id);
-           (async () => await db.addNewCategory(category_name, category_id))();
-        })
-      }
+      console.log('Message is from Inventory');
 
+      //Generate categories
+      await Promise.all(message.items.map(({category_name, category_id}) => db.addNewCategory(category_name, category_id)))
       message.items.forEach(({category_name, category_id}) => {
         //Update item where order id 
          (async () => await db.updateCategoryId(category_id, message.order_id))();
       })
 
-      // //Check if we have devices for this user
-      let user_idResult = await db.getUserFromOrder(message.order_id);
-      // console.log('user id result', user_idResult);
-      let user_id = user_idResult[0].user_id;
-      // console.log('user id', user_id);
-      let haveDevices = await db.searchDevices(user_id);
-      if (haveDevices.length > 0) {
-        //Search for user's order with no fraud score
-        //Need to query the db for the user_id
-        // console.log('user id', user_id);
-        let unprocessedOrders = await db.getUnprocessedOrder(user_id);
-        // console.log('unprocessed orders', unprocessedOrders);
-        let unprocessedOrder = unprocessedOrders[0];
-        // console.log('unprocessed order', unprocessedOrder);
-        //Check if we have categories from this user's order
-        let haveCategories = await db.getItemsFromOrder(unprocessedOrder.id);
-        if (haveCategories.length > 0) {
-          //Send unprocessed order through to analysis
-          fraudAnalysis(unprocessedOrder.id);
-        }
+      //Set have categories in unprocessed order cache to true
+      client.setAsync(`${message.order_id}:categories`, 'true');
+      let haveCategories = await client.existsAsync(`${message.order_id}:categories`);
+      let haveDevices = await client.existsAsync(`${message.order_id}:devices`);
+      if (haveCategories && haveDevices) {
+        //Send unprocessed order through to analysis
+        client.delAsync(`${message.order_id}:categories`);
+        client.delAsync(`${message.order_id}:devices`);
+        sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle: ReceiptHandle}).promise()
+        .then(x => fraudAnalysis(message.order_id))
+        .catch(err => console.error(err));
+
       } else {
-        console.log('Need info from User Activity');
+        // console.log('Need info from User Activity');
+        sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle: ReceiptHandle}).promise();
+        
       }
 
     } else if (message.chargedback_at || message.order) {//Message is from Orders
-      console.log('***Message is from Orders***');
-      if (message.chargedback_at) {//Update chargeback date
-        console.log('***Chargeback received***');
-        //Update order table
-        await db.updateCB(message.order_id, moment(message.chargedback_at).format("YYYY-MM-DD HH:mm:ss"));
-      } else {//Fraud analysis
-        console.log('***Analyzing for fraud***');
-        //Save order to database
-        await db.addNewOrder(
-          message.order.order_id,
-          message.order.user_id, 
-          message.order.billing_state, 
-          message.order.billing_ZIP,
-          message.order.billing_country,
-          message.order.shipping_state, 
-          message.order.shipping_ZIP,
-          message.order.shipping_country,
-          message.order.total_price,
-          moment(message.order.purchased_at).format("YYYY-MM-DD HH:mm:ss"),
-          message.order.std_dev_from_aov
-        );
-        //Save items to database
-        await Promise.all(message.items.map(item => db.addNewItemFromOrder(item.item_id, message.order.order_id)))
-        //Send message to Users
-        let usersParams = {
-          MessageBody: JSON.stringify({
-            user_id: message.order.user_id,
-            days: 30
-          }),
-         QueueUrl: usersOutbox
-        };
+        console.log('Message is from Orders');
+        if (message.chargedback_at) {//Update chargeback date
+          // console.log('Chargeback received');
+          //Update order table
+          db.updateCB(message.order_id, moment(message.chargedback_at).format("YYYY-MM-DD HH:mm:ss"));
+          sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle: ReceiptHandle}).promise();
+        
+    } else {//Fraud analysis
+      // console.log('***Analyzing for fraud***');
+      //Save order to database
+      db.addNewOrder(
+        message.order.order_id,
+        message.order.user_id, 
+        message.order.billing_state, 
+        message.order.billing_ZIP,
+        message.order.billing_country,
+        message.order.shipping_state, 
+        message.order.shipping_ZIP,
+        message.order.shipping_country,
+        message.order.total_price,
+        moment(message.order.purchased_at).format("YYYY-MM-DD HH:mm:ss"),
+        message.order.std_dev_from_aov
+      );
+      //Save items to database
+      await Promise.all(message.items.map(item => db.addNewItemFromOrder(item.item_id, message.order.order_id)));
+      sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle: ReceiptHandle}).promise();
 
-        sqs.sendMessage(usersParams).promise()
-        .then(data => console.log("Successfully sent message to User Activity"))
-        .catch(err => console.log(err));
+      //Send message to Users
+      let usersParams = {
+        MessageBody: JSON.stringify({
+          user_id: message.order.user_id,
+          days: 30
+        }),
+       QueueUrl: usersOutbox
+      };
 
-        //Send message to Inventory
-        let invParams = {
-          MessageBody: JSON.stringify({
-            order_id: message.order.order_id,
-            items: message.items.map(({item_id}) => item_id)
-          }),
-         QueueUrl: inventoryOutbox
-        };
+      sqs.sendMessage(usersParams).promise();
 
-        sqs.sendMessage(invParams).promise()
-        .then(data => console.log("Successfully sent message to Inventory"))
-        .catch(err => console.log(err));
+      //Send message to Inventory
+      let invParams = {
+        MessageBody: JSON.stringify({
+          order_id: message.order.order_id,
+          items: message.items.map(({item_id}) => item_id)
+        }),
+       QueueUrl: inventoryOutbox
+      };
+
+      sqs.sendMessage(invParams).promise();
       }
     } else {
-      console.log('Message looks weird!')
+      // console.log('Message looks weird!');
+      sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle: ReceiptHandle}).promise();
     }
   } catch(e) {
     await console.error(e);
@@ -157,7 +161,8 @@ const fraudAnalysis = async order_id => {
     //Algorithm parameters
     const algWeight = 25;
     const acceptableAOVStdDev = 2;
-    const acceptableNumOfDevices = 6;
+    const acceptableNumOfDevices = 5;
+    const acceptableCategoryFraudRisk = 75;
     let fraud_score = 0;
 
     //*** INFO FROM ORDERS ***
@@ -167,32 +172,33 @@ const fraudAnalysis = async order_id => {
     let { billing_state, shipping_state, user_id, std_dev_from_aov } = orderInfo[0];
     fraud_score += billing_state === shipping_state ? 0 : algWeight;
     //Check if order total is unusually high
-    fraud_score += std_dev_from_aov < acceptableAOVStdDev ? 0 : algWeight;
+    if (std_dev_from_aov > 1) {
+      fraud_score += std_dev_from_aov < acceptableAOVStdDev ? algWeight * (std_dev_from_aov - 1) : algWeight;
+    }
 
     //*** INFO FROM USER ***
     //Search for a user's devices
     let deviceResult = await db.searchDevices(user_id);
+    let uniqueDevices = _.uniq(deviceResult);
     // determine if # of devices is high
-    fraud_score += deviceResult.length < acceptableNumOfDevices ? 0 : algWeight;
+    fraud_score += uniqueDevices.length < acceptableNumOfDevices ? algWeight * (uniqueDevices.length / acceptableNumOfDevices) : algWeight;
 
-    //*** INFO FROM INVENTORY ***
+    //***INFO FROM INVENTORY***
     //Determine if order has items from high-risk categories
     let itemsFromOrder = await db.getItemsFromOrder(order_id);
-    // console.log("itemsFromOrder", itemsFromOrder);
     let categoryIds = itemsFromOrder.map(item => item.category_id);
-    // console.log('categoryIds', categoryIds);
+
     //Get category fraud risk for each item
     let arrayOfCategoryFraudRisk = await Promise.all(categoryIds.map(category_id => db.getCategoryFraudRisk(category_id)));
     // console.log('arrayOfCategoryFraudRisk', arrayOfCategoryFraudRisk);
     //Sum category fraud risk scores
     let totalCategoriesFraudRisk = arrayOfCategoryFraudRisk.reduce((acc, cur) => acc + cur[0].fraud_risk, 0);
 
-    //Increment fraud score if category risk is over 30
-    fraud_score += totalCategoriesFraudRisk < 80 ? 0 : algWeight; 
-    console.log('***FRAUD SCORE***' ,fraud_score);
+    //Increment fraud score if category risk is over acceptable category fraud risk
+    fraud_score += totalCategoriesFraudRisk < acceptableCategoryFraudRisk ? algWeight * (totalCategoriesFraudRisk / acceptableCategoryFraudRisk) : algWeight; 
+    console.log('FRAUD SCORE:' ,fraud_score);
     //Update fraud score for order in database
-    await db.updateFraudScore(user_id, fraud_score);
-
+    db.updateFraudScore(user_id, fraud_score);
     //Send message to Orders with order ID and fraud score
     let ordersParams = {
       MessageBody: JSON.stringify({
@@ -204,9 +210,7 @@ const fraudAnalysis = async order_id => {
      QueueUrl: ordersOutbox
     };
 
-    sqs.sendMessage(ordersParams).promise()
-    .then(data => console.log("Successfully sent message to Orders"))
-    .catch(err => console.log(err));
+    sqs.sendMessage(ordersParams).promise();
 
   } catch(e) {
     await console.error(e);
@@ -215,69 +219,33 @@ const fraudAnalysis = async order_id => {
   
 // ================== AWS ====================
 // Load the AWS SDK for Node.js
-const Consumer = require('sqs-consumer');
 const AWS = require('aws-sdk');
 
 // Load credentials and set the region from the JSON file
 AWS.config.loadFromPath('./config.json');
+AWS.config.setPromisesDependency(Promise);
 
 // SQS service objects
-const sqs = new AWS.SQS({apiVersion: '2012-11-05'}); //For sending
-const sqsOrders = new AWS.SQS({apiVersion: '2012-11-05'});
-const sqsUsers = new AWS.SQS({apiVersion: '2012-11-05'});
-const sqsInventory = new AWS.SQS({apiVersion: '2012-11-05'});
+const sqs = new AWS.SQS({apiVersion: '2012-11-05'});
 
-//Polling for messages
+const params = {
+  QueueUrl: inbox
+};
 
-  //Orders
-  const sqsConsumerOrders = Consumer.create({
-    queueUrl: ordersInbox,
-    handleMessage: (message, done) => {
-      haveAllOrderInfo(message.Body);
-      done();
-    },
-    sqs: sqsOrders
-  });
+let pollQueue = x => { 
+  sqs.receiveMessage(params).promise()
+  .then(data => {
+    if (data.Messages) {
+      haveAllOrderInfo(data.Messages[0].Body, data.Messages[0].ReceiptHandle);
+    }
+  })
+  .catch(error => console.error(error));
+};
 
-  //Users
-  const sqsConsumerUsers = Consumer.create({
-    queueUrl: usersInbox,
-    handleMessage: (message, done) => {
-      haveAllOrderInfo(message.Body);
-      done();
-    },
-    sqs: sqsUsers
-  });
+setInterval(pollQueue, 100);
 
-  //Inventory
-  const sqsConsumerInventory = Consumer.create({
-    queueUrl: inventoryInbox,
-    handleMessage: (message, done) => {
-      haveAllOrderInfo(message.Body);
-      done();
-    },
-    sqs: sqsInventory
-  });
-   
-  sqsConsumerOrders.on('error', (err) => {
-    console.log(err.message);
-  });
-   
-  sqsConsumerOrders.start();
-
-  sqsConsumerUsers.on('error', (err) => {
-    console.log(err.message);
-  });
-   
-  sqsConsumerUsers.start();
-
-  sqsConsumerInventory.on('error', (err) => {
-    console.log(err.message);
-  });
-   
-  sqsConsumerInventory.start();
 // ===========================================
 
-app.listen(3000, function() {
+app.listen(process.env.PORT || 3000, function() {
   console.log('listening on port 3000!');
 });
