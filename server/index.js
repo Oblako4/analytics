@@ -6,9 +6,9 @@ const moment = require('moment');
 const { inbox, usersOutbox, ordersOutbox, inventoryOutbox } = require ('../config.js');
 const _ = require('lodash');
 const Promise = require('bluebird');
-const RedisServer = require('redis-server');
 
 //===========Redis===============
+const RedisServer = require('redis-server');
 const redis = require('redis');
 Promise.promisifyAll(redis.RedisClient.prototype);
 Promise.promisifyAll(redis.Multi.prototype);
@@ -64,7 +64,7 @@ const haveAllOrderInfo = async (message, ReceiptHandle) => {
         .catch(err => console.error(err));
 
       } else {
-        console.log('We do not have info from Inventory yet');
+        // console.log('We do not have info from Inventory yet');
         sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle: ReceiptHandle}).promise();
         
       }
@@ -92,7 +92,7 @@ const haveAllOrderInfo = async (message, ReceiptHandle) => {
         .catch(err => console.error(err));
 
       } else {
-        console.log('Need info from User Activity');
+        // console.log('Need info from User Activity');
         sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle: ReceiptHandle}).promise();
         
       }
@@ -100,7 +100,7 @@ const haveAllOrderInfo = async (message, ReceiptHandle) => {
     } else if (message.chargedback_at || message.order) {//Message is from Orders
         console.log('Message is from Orders');
         if (message.chargedback_at) {//Update chargeback date
-          console.log('Chargeback received');
+          // console.log('Chargeback received');
           //Update order table
           db.updateCB(message.order_id, moment(message.chargedback_at).format("YYYY-MM-DD HH:mm:ss"));
           sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle: ReceiptHandle}).promise();
@@ -198,7 +198,7 @@ const fraudAnalysis = async order_id => {
     fraud_score += totalCategoriesFraudRisk < acceptableCategoryFraudRisk ? algWeight * (totalCategoriesFraudRisk / acceptableCategoryFraudRisk) : algWeight; 
     console.log('FRAUD SCORE:' ,fraud_score);
     //Update fraud score for order in database
-    await db.updateFraudScore(user_id, fraud_score);
+    db.updateFraudScore(user_id, fraud_score);
     //Send message to Orders with order ID and fraud score
     let ordersParams = {
       MessageBody: JSON.stringify({
@@ -210,7 +210,7 @@ const fraudAnalysis = async order_id => {
      QueueUrl: ordersOutbox
     };
 
-    await sqs.sendMessage(ordersParams).promise();
+    sqs.sendMessage(ordersParams).promise();
 
   } catch(e) {
     await console.error(e);
