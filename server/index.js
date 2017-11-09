@@ -31,10 +31,12 @@ const dataGeneration = require('./routes/data-generation');
 app.use('/dataGeneration', dataGeneration); 
 
 //=========Check if we have all order info in our database===============
-const haveAllOrderInfo = async (message, ReceiptHandle) => {
-  message = JSON.parse(message);
+const haveAllOrderInfo = async (msg, ReceiptHandle) => {
+  var message = JSON.parse(msg);
+  await sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle: ReceiptHandle}).promise();
+
   try {
-    // console.log('***HERE IS WHAT THE MESSAGE LOOKS LIKE***', message);
+    console.log('***HERE IS WHAT THE MESSAGE LOOKS LIKE***', message);
     if (message.user) {//Message is from User Activity
       console.log('Message is from User Activity');
       //Clear devices for this user
@@ -59,14 +61,11 @@ const haveAllOrderInfo = async (message, ReceiptHandle) => {
         client.delAsync(`${order_id}:devices`);
 
         //Send unprocessed order through to analysis
-        sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle: ReceiptHandle}).promise()
-        .then(x => fraudAnalysis(order_id))
-        .catch(err => console.error(err));
+        fraudAnalysis(order_id);
+        
 
       } else {
-        // console.log('We do not have info from Inventory yet');
-        sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle: ReceiptHandle}).promise();
-        
+        console.log('We do not have info from Inventory yet');
       }
 
     } else if (message.order_id) {//Message is from Inventory
@@ -87,14 +86,10 @@ const haveAllOrderInfo = async (message, ReceiptHandle) => {
         //Send unprocessed order through to analysis
         client.delAsync(`${message.order_id}:categories`);
         client.delAsync(`${message.order_id}:devices`);
-        sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle: ReceiptHandle}).promise()
-        .then(x => fraudAnalysis(message.order_id))
-        .catch(err => console.error(err));
+        x => fraudAnalysis(message.order_id);
 
       } else {
-        // console.log('Need info from User Activity');
-        sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle: ReceiptHandle}).promise();
-        
+        console.log('Need info from User Activity');        
       }
 
     } else if (message.chargedback_at || message.order) {//Message is from Orders
@@ -103,7 +98,6 @@ const haveAllOrderInfo = async (message, ReceiptHandle) => {
           // console.log('Chargeback received');
           //Update order table
           db.updateCB(message.order_id, moment(message.chargedback_at).format("YYYY-MM-DD HH:mm:ss"));
-          sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle: ReceiptHandle}).promise();
         
     } else {//Fraud analysis
       // console.log('***Analyzing for fraud***');
@@ -122,8 +116,7 @@ const haveAllOrderInfo = async (message, ReceiptHandle) => {
         message.order.std_dev_from_aov
       );
       //Save items to database
-      await Promise.all(message.items.map(item => db.addNewItemFromOrder(item.item_id, message.order.order_id)));
-      sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle: ReceiptHandle}).promise();
+      Promise.all(message.items.map(item => db.addNewItemFromOrder(item.item_id, message.order.order_id)));
 
       //Send message to Users
       let usersParams = {
@@ -134,7 +127,9 @@ const haveAllOrderInfo = async (message, ReceiptHandle) => {
        QueueUrl: usersOutbox
       };
 
-      sqs.sendMessage(usersParams).promise();
+      sqs.sendMessage(usersParams).promise()
+      .then(x => console.log('Sent message to users!'))
+      .catch(err => console.error(err));
 
       //Send message to Inventory
       let invParams = {
@@ -145,11 +140,13 @@ const haveAllOrderInfo = async (message, ReceiptHandle) => {
        QueueUrl: inventoryOutbox
       };
 
-      sqs.sendMessage(invParams).promise();
+      sqs.sendMessage(invParams).promise()
+      .then(x => console.log('Sent message to inventory!'))
+      .catch(err => console.error(err));
       }
     } else {
-      // console.log('Message looks weird!');
-      sqs.deleteMessage({QueueUrl: inbox, ReceiptHandle: ReceiptHandle}).promise();
+      console.log('Message looks weird!');
+      
     }
   } catch(e) {
     await console.error(e);
@@ -198,7 +195,9 @@ const fraudAnalysis = async order_id => {
     fraud_score += totalCategoriesFraudRisk < acceptableCategoryFraudRisk ? algWeight * (totalCategoriesFraudRisk / acceptableCategoryFraudRisk) : algWeight; 
     console.log('FRAUD SCORE:' ,fraud_score);
     //Update fraud score for order in database
-    db.updateFraudScore(user_id, fraud_score);
+    db.updateFraudScore(user_id, fraud_score)
+    .then(x => {
+
     //Send message to Orders with order ID and fraud score
     let ordersParams = {
       MessageBody: JSON.stringify({
@@ -211,6 +210,8 @@ const fraudAnalysis = async order_id => {
     };
 
     sqs.sendMessage(ordersParams).promise();
+    })
+    .catch(err => console.error(err));
 
   } catch(e) {
     await console.error(e);
@@ -242,7 +243,7 @@ let pollQueue = x => {
   .catch(error => console.error(error));
 };
 
-setInterval(pollQueue, 100);
+setInterval(pollQueue, 50);
 
 // ===========================================
 
